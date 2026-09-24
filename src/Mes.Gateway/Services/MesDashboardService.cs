@@ -1,4 +1,4 @@
-﻿using Mes.Gateway.Models;
+﻿using Mes.Gateway.Models.MachineStatus;
 
 namespace Mes.Gateway.Services;
 

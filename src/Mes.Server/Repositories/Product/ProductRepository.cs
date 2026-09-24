@@ -276,6 +276,273 @@ public class ProductRepository
     }
 
 
+
+    // =====================================================
+    // 현재 품질판정 대상 Product 조회
+    //
+    // RUNNING WorkOrder
+    // → RUNNING LOT
+    // → quality_status = PENDING 중
+    // → sequence_no가 가장 작은 Product
+    //
+    // Product status는 WAITING / IN_PROCESS를 제한하지 않음
+    // =====================================================
+    public async Task<ProductInfo?> GetCurrentQualityPendingAsync()
+    {
+        await using var connection =
+            _connectionFactory.CreateConnection();
+
+        await connection.OpenAsync();
+
+
+        const string sql = """
+        DECLARE
+            @RunningWorkOrderCount INT,
+            @WorkOrderId BIGINT,
+            @LotId BIGINT;
+
+
+        ------------------------------------------------
+        -- RUNNING WorkOrder 개수 확인
+        ------------------------------------------------
+        SELECT
+            @RunningWorkOrderCount = COUNT(*)
+        FROM work_orders
+        WHERE status = 'RUNNING';
+
+
+        IF @RunningWorkOrderCount = 0
+        BEGIN
+            RETURN;
+        END;
+
+
+        IF @RunningWorkOrderCount > 1
+        BEGIN
+            THROW 50401,
+                'RUNNING 상태의 작업지시가 2개 이상 존재합니다.',
+                1;
+        END;
+
+
+        ------------------------------------------------
+        -- 현재 RUNNING WorkOrder
+        ------------------------------------------------
+        SELECT
+            @WorkOrderId = work_order_id
+        FROM work_orders
+        WHERE status = 'RUNNING';
+
+
+        ------------------------------------------------
+        -- 현재 RUNNING LOT
+        ------------------------------------------------
+        SELECT
+            @LotId = lot_id
+        FROM lots
+        WHERE work_order_id = @WorkOrderId
+          AND status = 'RUNNING';
+
+
+        IF @LotId IS NULL
+        BEGIN
+            THROW 50402,
+                'RUNNING 작업지시에 RUNNING LOT이 없습니다.',
+                1;
+        END;
+
+
+        ------------------------------------------------
+        -- 품질판정 대기 Product
+        ------------------------------------------------
+        SELECT TOP 1
+
+            p.product_id,
+            p.product_code,
+
+            p.lot_id,
+            l.lot_code,
+
+            l.work_order_id,
+            wo.work_order_code,
+
+            p.sequence_no,
+            p.status,
+            p.quality_status,
+
+            p.current_location_id,
+            loc.location_code,
+            loc.location_name,
+
+            p.created_at,
+            p.started_at,
+            p.completed_at
+
+        FROM products p
+
+        INNER JOIN lots l
+            ON p.lot_id = l.lot_id
+
+        INNER JOIN work_orders wo
+            ON l.work_order_id = wo.work_order_id
+
+        LEFT JOIN locations loc
+            ON p.current_location_id = loc.location_id
+
+        WHERE p.lot_id = @LotId
+
+          AND p.quality_status = 'PENDING'
+
+        ORDER BY p.sequence_no;
+        """;
+
+
+        await using var command =
+            new SqlCommand(
+                sql,
+                connection
+            );
+
+
+        await using var reader =
+            await command.ExecuteReaderAsync();
+
+
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+
+        return MapProduct(reader);
+    }
+
+
+    // =====================================================
+    // 현재 공정 진행 중 Product 조회
+    //
+    // Gateway 재시작 등의 상황에서
+    // 현재 IN_PROCESS Product를 복구하기 위한 조회
+    // =====================================================
+    public async Task<ProductInfo?> GetCurrentInProcessAsync()
+    {
+        await using var connection =
+            _connectionFactory.CreateConnection();
+
+        await connection.OpenAsync();
+
+
+        const string sql = """
+        DECLARE
+            @RunningWorkOrderCount INT,
+            @WorkOrderId BIGINT,
+            @LotId BIGINT;
+
+
+        SELECT
+            @RunningWorkOrderCount = COUNT(*)
+        FROM work_orders
+        WHERE status = 'RUNNING';
+
+
+        IF @RunningWorkOrderCount = 0
+        BEGIN
+            RETURN;
+        END;
+
+
+        IF @RunningWorkOrderCount > 1
+        BEGIN
+            THROW 50401,
+                'RUNNING 상태의 작업지시가 2개 이상 존재합니다.',
+                1;
+        END;
+
+
+        SELECT
+            @WorkOrderId = work_order_id
+        FROM work_orders
+        WHERE status = 'RUNNING';
+
+
+        SELECT
+            @LotId = lot_id
+        FROM lots
+        WHERE work_order_id = @WorkOrderId
+          AND status = 'RUNNING';
+
+
+        IF @LotId IS NULL
+        BEGIN
+            THROW 50402,
+                'RUNNING 작업지시에 RUNNING LOT이 없습니다.',
+                1;
+        END;
+
+
+        SELECT TOP 1
+
+            p.product_id,
+            p.product_code,
+
+            p.lot_id,
+            l.lot_code,
+
+            l.work_order_id,
+            wo.work_order_code,
+
+            p.sequence_no,
+            p.status,
+            p.quality_status,
+
+            p.current_location_id,
+            loc.location_code,
+            loc.location_name,
+
+            p.created_at,
+            p.started_at,
+            p.completed_at
+
+        FROM products p
+
+        INNER JOIN lots l
+            ON p.lot_id = l.lot_id
+
+        INNER JOIN work_orders wo
+            ON l.work_order_id = wo.work_order_id
+
+        LEFT JOIN locations loc
+            ON p.current_location_id = loc.location_id
+
+        WHERE p.lot_id = @LotId
+
+          AND p.status = 'IN_PROCESS'
+
+        ORDER BY p.sequence_no;
+        """;
+
+
+        await using var command =
+            new SqlCommand(
+                sql,
+                connection
+            );
+
+
+        await using var reader =
+            await command.ExecuteReaderAsync();
+
+
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+
+        return MapProduct(reader);
+    }
+
+
     // =====================================================
     // SqlDataReader → ProductInfo 변환
     // =====================================================

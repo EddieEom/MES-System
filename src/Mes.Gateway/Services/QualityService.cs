@@ -1,5 +1,5 @@
 ﻿using System.Collections.Concurrent;
-using Mes.Gateway.Models;
+using Mes.Gateway.Models.Quailty;
 
 namespace Mes.Gateway.Services;
 

@@ -15,4 +15,8 @@ public interface IProductRepository
     Task<ProductInfo?> GetNextWaitingAsync(
         string lotCode
     );
+
+    Task<ProductInfo?> GetCurrentQualityPendingAsync();
+
+    Task<ProductInfo?> GetCurrentInProcessAsync();
 }

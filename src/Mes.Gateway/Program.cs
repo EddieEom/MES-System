@@ -1,56 +1,110 @@
-﻿using Mes.Gateway.Database;
+﻿using Mes.Gateway.Api;
 using Mes.Gateway.Mqtt;
 using Mes.Gateway.Routing;
 using Mes.Gateway.Services;
 
+
+// ======================================
+// MES Gateway Start
+// ======================================
+
 Console.WriteLine(
     "================================="
 );
 
 Console.WriteLine(
-    " MES Gateway Starting..."
+    " MES 게이트웨이 여는 중..."
 );
 
 Console.WriteLine(
     "================================="
 );
 
+Console.WriteLine();
+
 
 // ======================================
-// MSSQL Connection
+// Mes.Server HTTP Client
 // ======================================
 
-string connectionString =
-    "Server=localhost;" +
-    "Database=MES_SYSTEM;" +
-    "Integrated Security=True;" +
-    "TrustServerCertificate=True;";
+// 개발 환경 기본 주소
+// 필요하면 환경변수 MES_SERVER_BASE_URL로 변경 가능
+string mesServerBaseUrl =
+    Environment.GetEnvironmentVariable(
+        "MES_SERVER_BASE_URL"
+    )
+    ?? "https://localhost:7075/";
 
-var dbConnectionFactory =
-    new MesDbConnectionFactory(
-        connectionString
+
+var httpClient =
+    new HttpClient
+    {
+        BaseAddress =
+            new Uri(
+                mesServerBaseUrl
+            ),
+
+        // Timeout은 MesApiClient에서
+        // 요청 단위로 관리
+        Timeout =
+            Timeout.InfiniteTimeSpan
+    };
+
+
+var failedEventStore =
+    new FailedEventStore();
+
+
+var mesApiClient =
+    new MesApiClient(
+        httpClient,
+        failedEventStore
     );
 
 
-try
-{
-    await dbConnectionFactory
-        .TestConnectionAsync();
-}
-catch (Exception ex)
+// ======================================
+// Mes.Server Connection Test
+// ======================================
+
+Console.WriteLine(
+    "[Gateway] Mes.Server 연결 확인 중..."
+);
+
+Console.WriteLine(
+    $"[Gateway] Server: {mesServerBaseUrl}"
+);
+
+Console.WriteLine();
+
+
+bool serverConnected =
+    await mesApiClient
+        .CheckConnectionAsync();
+
+
+if (!serverConnected)
 {
     Console.WriteLine();
+
     Console.WriteLine(
-        "[DB ERROR] MSSQL 연결 실패"
+        "[Gateway] Mes.Server 연결 실패"
     );
 
     Console.WriteLine(
-        $"[DB ERROR] {ex.Message}"
+        "[Gateway] Gateway를 종료합니다."
     );
+
+    httpClient.Dispose();
 
     return;
 }
 
+
+Console.WriteLine();
+
+Console.WriteLine(
+    "[Gateway] Mes.Server 연결 확인 완료"
+);
 
 Console.WriteLine();
 
@@ -62,19 +116,25 @@ Console.WriteLine();
 var machineStatusService =
     new MachineStatusService();
 
+
 var qualityService =
     new QualityService();
+
 
 var productionService =
     new ProductionService(
         qualityService
     );
 
+
 var dashboardService =
     new MesDashboardService(
         machineStatusService,
         productionService
     );
+
+var activeProductService =
+    new ActiveProductService();
 
 
 // ======================================
@@ -86,7 +146,10 @@ var router =
         machineStatusService,
         qualityService,
         productionService,
-        dashboardService
+        dashboardService,
+        activeProductService,
+        mesApiClient
+        
     );
 
 
@@ -100,24 +163,48 @@ var mqttService =
     );
 
 
+// ======================================
+// MQTT Start
+// ======================================
+
 try
 {
-    await mqttService.StartAsync();
+    await mqttService
+        .StartAsync();
 }
 catch (Exception ex)
 {
+    Console.WriteLine();
+
     Console.WriteLine(
         $"[ERROR] Gateway 시작 실패: {ex.Message}"
     );
+
+    httpClient.Dispose();
 
     return;
 }
 
 
+// ======================================
+// Running
+// ======================================
+
 Console.WriteLine();
+
 Console.WriteLine(
-    "Gateway 실행 중..."
+    "================================="
 );
+
+Console.WriteLine(
+    " MES Gateway Running"
+);
+
+Console.WriteLine(
+    "================================="
+);
+
+Console.WriteLine();
 
 Console.WriteLine(
     "종료하려면 ENTER를 누르세요."
@@ -127,8 +214,31 @@ Console.WriteLine(
 Console.ReadLine();
 
 
-await mqttService.StopAsync();
+// ======================================
+// MQTT Stop
+// ======================================
 
+try
+{
+    await mqttService
+        .StopAsync();
+}
+catch (Exception ex)
+{
+    Console.WriteLine(
+        $"[ERROR] MQTT 종료 중 오류: {ex.Message}"
+    );
+}
+
+
+// ======================================
+// HTTP Client Dispose
+// ======================================
+
+httpClient.Dispose();
+
+
+Console.WriteLine();
 
 Console.WriteLine(
     "MES Gateway 종료"

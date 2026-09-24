@@ -1,9 +1,10 @@
-﻿namespace Mes.Gateway.Models;
+﻿namespace Mes.Gateway.Models.MachineStatus;
 
-public class MachineStatusMessage
+public class MachineStatusApiRequest
 {
-    public DateTimeOffset Timestamp { get; set; }
-    public string Machine { get; set; } = string.Empty;
+    public string MachineCode { get; set; } = string.Empty;
+
+    public DateTimeOffset MeasuredAt { get; set; }
 
     public string State { get; set; } = string.Empty;
 
@@ -26,4 +27,6 @@ public class MachineStatusMessage
     public double RepairPercentage { get; set; }
 
     public double Utilization { get; set; }
+
+    public string SourceSystem { get; set; } = "GEMINI";
 }

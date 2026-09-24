@@ -1,4 +1,4 @@
-﻿namespace Mes.Gateway.Models;
+﻿namespace Mes.Gateway.Models.Quailty;
 
 public class QualityResultMessage
 {
