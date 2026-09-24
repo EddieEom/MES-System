@@ -1,0 +1,61 @@
+# =========================
+# .NET / Visual Studio
+# =========================
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# VS Code local settings
+.vscode/
+
+# =========================
+# Frontend / Vue
+# =========================
+node_modules/
+dist/
+.vite/
+coverage/
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+
+# =========================
+# Logs / Temp
+# =========================
+*.log
+logs/
+tmp/
+temp/
+
+# =========================
+# Database local files
+# =========================
+*.mdf
+*.ldf
+*.bak
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Test results
+# =========================
+TestResults/
+coverage/

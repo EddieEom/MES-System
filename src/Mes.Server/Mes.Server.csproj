@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>51889900-2bfe-44a0-9cf4-5fc8fddc4eb3</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Models\User\" />
+    <Folder Include="Repositories\User\" />
+    <Folder Include="Services\Machine\" />
+    <Folder Include="Services\Lot\" />
+    <Folder Include="Services\Alarm\" />
+    <Folder Include="Services\User\" />
+    <Folder Include="Services\Process\" />
+    <Folder Include="Services\Product\" />
+    <Folder Include="Services\Quality\" />
+  </ItemGroup>
+
+</Project>
