@@ -7,10 +7,13 @@ using Mes.Server.Repositories.WorkOrder;
 using Mes.Server.Repositories.Process;
 using Mes.Server.Repositories.Alarm;
 using Mes.Server.Services.WorkOrder;
+using Mes.Server.Repositories.Production;
+using Mes.Server.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 
 // DB ΩÃ±€≈Ê ø¨∞·
 builder.Services.AddSingleton<MesDbConnectionFactory>();
@@ -24,6 +27,7 @@ builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IProcessRepository,ProcessRepository>();
 builder.Services.AddScoped<IAlarmRepository,AlarmRepository>();
 builder.Services.AddScoped<IWorkOrderService,WorkOrderService>();
+builder.Services.AddScoped<IProductionRepository,ProductionRepository>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -40,5 +44,9 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapControllers();
+
+app.MapHub<GatewayHub>(
+    "/hubs/gateway"
+);
 
 app.Run();

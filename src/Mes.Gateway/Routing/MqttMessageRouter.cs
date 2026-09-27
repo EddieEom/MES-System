@@ -611,24 +611,32 @@ public class MqttMessageRouter
         _activeProductService.Clear();
 
         // ======================================
-        // 3. Gateway 임시 RAM 집계
+        // Gateway Local Quality 상태 갱신
         //
-        // 서버 저장이 성공했을 때만 갱신
-        // 최종적으로는 DB 기반 집계로 교체 예정
+        // Production 실적의 기준은 더 이상
+        // QualityService RAM이 아님.
         // ======================================
 
-        bool processed =
-            _qualityService.Process(
-                data
-            );
+        _qualityService.Process(
+            data
+        );
 
 
-        if (processed)
-        {
-            _productionService.PrintStatus();
+        // ======================================
+        // AWS RDS 기준 최신 생산실적 조회
+        // ======================================
 
-            _dashboardService.Print();
-        }
+        await _productionService
+            .RefreshAsync();
+
+
+        // ======================================
+        // DB 기준 출력
+        // ======================================
+
+        _productionService.PrintStatus();
+
+        _dashboardService.Print();
 
 
         // ======================================

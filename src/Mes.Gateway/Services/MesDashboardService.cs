@@ -106,6 +106,53 @@ public class MesDashboardService
 
 
         Console.WriteLine("==============================================");
+
         Console.WriteLine();
+
+        Console.WriteLine(
+            "[ CURRENT LOT ]"
+        );
+
+        if (!string.IsNullOrWhiteSpace(
+            _productionService.CurrentLotCode))
+        {
+            Console.WriteLine(
+                $"Lot          : {_productionService.CurrentLotCode}"
+            );
+
+            Console.WriteLine(
+                $"Status       : {_productionService.CurrentLotStatus}"
+            );
+
+            Console.WriteLine(
+                $"Target       : {_productionService.CurrentLotTargetQty}"
+            );
+
+            Console.WriteLine(
+                $"Produced     : {_productionService.CurrentLotProducedQty}"
+            );
+
+            Console.WriteLine(
+                $"Good         : {_productionService.CurrentLotGoodQty}"
+            );
+
+            Console.WriteLine(
+                $"Defect       : {_productionService.CurrentLotDefectQty}"
+            );
+
+            Console.WriteLine(
+                $"Progress     : {_productionService.CurrentLotProgressRate:F2}%"
+            );
+
+            Console.WriteLine(
+                $"Yield        : {_productionService.CurrentLotYieldRate:F2}%"
+            );
+        }
+        else
+        {
+            Console.WriteLine(
+                "현재 RUNNING LOT 없음"
+            );
+        }
     }
 }

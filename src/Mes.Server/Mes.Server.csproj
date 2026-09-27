@@ -18,6 +18,7 @@
     <Folder Include="Services\Machine\" />
     <Folder Include="Services\Lot\" />
     <Folder Include="Services\Alarm\" />
+    <Folder Include="Services\Production\" />
     <Folder Include="Services\User\" />
     <Folder Include="Services\Process\" />
     <Folder Include="Services\Product\" />

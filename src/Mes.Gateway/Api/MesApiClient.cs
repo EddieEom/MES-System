@@ -4,6 +4,8 @@ using Mes.Gateway.Models.Quailty;
 using Mes.Gateway.Services;
 using System.Net;
 using System.Net.Http.Json;
+using Mes.Gateway.Models.Production;
+using Mes.Gateway.Models.Alarm;
 
 namespace Mes.Gateway.Api;
 
@@ -24,6 +26,624 @@ public class MesApiClient : IMesApiClient
         _failedEventStore = failedEventStore;
     }
 
+
+    // =====================================================
+    // Alarm 발생
+    //
+    // Alarm에는 EventId가 없으므로
+    // 자동 Retry를 사용하지 않음.
+    // =====================================================
+
+    public async Task<AlarmApiResponse?> PostAlarmAsync(
+        AlarmCreateApiRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response =
+                await SendWithRetryAsync(
+                    ct =>
+                        _httpClient.PostAsJsonAsync(
+                            "api/alarms",
+                            request,
+                            ct
+                        ),
+
+                    $"Alarm Create/{request.MachineCode}/{request.AlarmCode}",
+
+                    enableRetry: false,
+
+                    cancellationToken
+                );
+
+
+            // ==========================================
+            // 응답 유실 가능성
+            //
+            // Retry하면 중복 INSERT 위험이 있으므로
+            // ACTIVE Alarm을 조회해 방금 저장된 Alarm 복구
+            // ==========================================
+
+            if (response == null)
+            {
+                var recovered =
+                    await FindActiveAlarmAsync(
+                        request.MachineCode,
+                        request.AlarmCode,
+                        request.OccurredAt,
+                        cancellationToken
+                    );
+
+
+                if (recovered != null)
+                {
+                    Console.WriteLine(
+                        $"[MES API] Alarm DB 저장 확인 완료 - {recovered.MachineCode}/{recovered.AlarmCode} / ID={recovered.AlarmId}"
+                    );
+
+                    return recovered;
+                }
+
+
+                await _failedEventStore
+                    .SaveAsync(
+                        "alarm-create",
+                        request,
+                        "HTTP 연결 실패 또는 Timeout"
+                    );
+
+
+                return null;
+            }
+
+
+            var body =
+                await response.Content
+                    .ReadAsStringAsync(
+                        cancellationToken
+                    );
+
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine(
+                    "[MES API] Alarm 등록 실패"
+                );
+
+                Console.WriteLine(
+                    $"[MES API] Machine: {request.MachineCode}"
+                );
+
+                Console.WriteLine(
+                    $"[MES API] AlarmCode: {request.AlarmCode}"
+                );
+
+                Console.WriteLine(
+                    $"[MES API] HTTP {(int)response.StatusCode} {response.StatusCode}"
+                );
+
+                Console.WriteLine(
+                    $"[MES API] Response: {body}"
+                );
+
+
+                await _failedEventStore
+                    .SaveAsync(
+                        "alarm-create",
+                        request,
+                        body
+                    );
+
+
+                return null;
+            }
+
+
+            var result =
+                System.Text.Json.JsonSerializer
+                    .Deserialize<AlarmCommandApiResponse>(
+                        body,
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        }
+                    );
+
+
+            if (result?.Alarm == null)
+            {
+                await _failedEventStore
+                    .SaveAsync(
+                        "alarm-create",
+                        request,
+                        "Alarm 응답 변환 실패"
+                    );
+
+
+                return null;
+            }
+
+
+            Console.WriteLine(
+                $"[MES API] Alarm 등록 성공 - {result.Alarm.MachineCode}/{result.Alarm.AlarmCode} / ID={result.Alarm.AlarmId}"
+            );
+
+
+            return result.Alarm;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"[MES API] Alarm 등록 오류 - {request.MachineCode}/{request.AlarmCode}: {ex.Message}"
+            );
+
+
+            await _failedEventStore
+                .SaveAsync(
+                    "alarm-create",
+                    request,
+                    ex.Message
+                );
+
+
+            return null;
+        }
+    }
+
+
+    // =====================================================
+    // 현재 ACTIVE Alarm 조회
+    // =====================================================
+
+    public async Task<IReadOnlyList<AlarmApiResponse>?>
+        GetActiveAlarmsAsync(
+            CancellationToken cancellationToken = default)
+    {
+        using var response =
+            await SendWithRetryAsync(
+                ct =>
+                    _httpClient.GetAsync(
+                        "api/alarms/active",
+                        ct
+                    ),
+
+                "ACTIVE Alarm 조회",
+
+                enableRetry: true,
+
+                cancellationToken
+            );
+
+
+        if (response == null)
+        {
+            Console.WriteLine(
+                "[MES API] ACTIVE Alarm 조회 실패 - 응답 없음"
+            );
+
+            return null;
+        }
+
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body =
+                await response.Content
+                    .ReadAsStringAsync(
+                        cancellationToken
+                    );
+
+
+            Console.WriteLine(
+                $"[MES API] ACTIVE Alarm 조회 실패 - HTTP {(int)response.StatusCode}"
+            );
+
+            Console.WriteLine(
+                $"[MES API] Response: {body}"
+            );
+
+
+            return null;
+        }
+
+
+        var alarms =
+            await response.Content
+                .ReadFromJsonAsync<
+                    List<AlarmApiResponse>
+                >(
+                    cancellationToken:
+                        cancellationToken
+                );
+
+
+        return alarms
+            ?? new List<AlarmApiResponse>();
+    }
+
+
+    // =====================================================
+    // 설비별 Alarm History
+    // =====================================================
+
+    public async Task<IReadOnlyList<AlarmApiResponse>?>
+        GetMachineAlarmsAsync(
+            string machineCode,
+            CancellationToken cancellationToken = default)
+    {
+        string encodedMachineCode =
+            Uri.EscapeDataString(
+                machineCode
+            );
+
+
+        using var response =
+            await SendWithRetryAsync(
+                ct =>
+                    _httpClient.GetAsync(
+                        $"api/alarms/machine/{encodedMachineCode}",
+                        ct
+                    ),
+
+                $"Alarm History/{machineCode}",
+
+                enableRetry: true,
+
+                cancellationToken
+            );
+
+
+        if (response == null)
+        {
+            return null;
+        }
+
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body =
+                await response.Content
+                    .ReadAsStringAsync(
+                        cancellationToken
+                    );
+
+
+            Console.WriteLine(
+                $"[MES API] Alarm History 조회 실패 - {machineCode}"
+            );
+
+            Console.WriteLine(
+                $"[MES API] Response: {body}"
+            );
+
+
+            return null;
+        }
+
+
+        var alarms =
+            await response.Content
+                .ReadFromJsonAsync<
+                    List<AlarmApiResponse>
+                >(
+                    cancellationToken:
+                        cancellationToken
+                );
+
+
+        return alarms
+            ?? new List<AlarmApiResponse>();
+    }
+
+
+    // =====================================================
+    // Alarm Clear
+    // =====================================================
+
+    public async Task<bool> ClearAlarmAsync(
+        long alarmId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response =
+                await SendWithRetryAsync(
+                    ct =>
+                        _httpClient.PostAsync(
+                            $"api/alarms/{alarmId}/clear",
+                            null,
+                            ct
+                        ),
+
+                    $"Alarm Clear/{alarmId}",
+
+                    // 응답 유실 후 재호출 시
+                    // Server가 이미 Clear된 Alarm에 404를 반환하므로
+                    // 자동 Retry하지 않음.
+                    enableRetry: false,
+
+                    cancellationToken
+                );
+
+
+            if (response == null)
+            {
+                // Clear 요청은 Server에서 성공했는데
+                // HTTP 응답만 유실됐을 수 있음.
+                var active =
+                    await GetActiveAlarmsAsync(
+                        cancellationToken
+                    );
+
+
+                if (active != null &&
+                    !active.Any(
+                        x =>
+                            x.AlarmId == alarmId
+                            && x.IsActive
+                    ))
+                {
+                    Console.WriteLine(
+                        $"[MES API] Alarm Clear DB 반영 확인 - ID={alarmId}"
+                    );
+
+                    return true;
+                }
+
+
+                await _failedEventStore
+                    .SaveAsync(
+                        "alarm-clear",
+                        new
+                        {
+                            AlarmId = alarmId
+                        },
+                        "HTTP 연결 실패 또는 Timeout"
+                    );
+
+
+                return false;
+            }
+
+
+            var body =
+                await response.Content
+                    .ReadAsStringAsync(
+                        cancellationToken
+                    );
+
+
+            if (!response.IsSuccessStatusCode)
+            {
+                // 다른 주체가 먼저 Clear했을 수도 있으므로
+                // ACTIVE 목록에서 최종 상태 확인
+                var active =
+                    await GetActiveAlarmsAsync(
+                        cancellationToken
+                    );
+
+
+                if (active != null &&
+                    !active.Any(
+                        x =>
+                            x.AlarmId == alarmId
+                            && x.IsActive
+                    ))
+                {
+                    Console.WriteLine(
+                        $"[MES API] Alarm 이미 Clear 상태 - ID={alarmId}"
+                    );
+
+                    return true;
+                }
+
+
+                Console.WriteLine(
+                    $"[MES API] Alarm Clear 실패 - ID={alarmId}"
+                );
+
+                Console.WriteLine(
+                    $"[MES API] Response: {body}"
+                );
+
+
+                await _failedEventStore
+                    .SaveAsync(
+                        "alarm-clear",
+                        new
+                        {
+                            AlarmId = alarmId
+                        },
+                        body
+                    );
+
+
+                return false;
+            }
+
+
+            Console.WriteLine(
+                $"[MES API] Alarm Clear 성공 - ID={alarmId}"
+            );
+
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"[MES API] Alarm Clear 오류 - ID={alarmId}: {ex.Message}"
+            );
+
+
+            await _failedEventStore
+                .SaveAsync(
+                    "alarm-clear",
+                    new
+                    {
+                        AlarmId = alarmId
+                    },
+                    ex.Message
+                );
+
+
+            return false;
+        }
+    }
+
+
+    // =====================================================
+    // 응답 유실 후 ACTIVE Alarm 복구
+    // =====================================================
+
+    private async Task<AlarmApiResponse?>
+        FindActiveAlarmAsync(
+            string machineCode,
+            string alarmCode,
+            DateTimeOffset occurredAt,
+            CancellationToken cancellationToken)
+    {
+        var alarms =
+            await GetActiveAlarmsAsync(
+                cancellationToken
+            );
+
+
+        if (alarms == null)
+        {
+            return null;
+        }
+
+
+        return alarms.FirstOrDefault(
+            x =>
+                x.IsActive
+
+                && string.Equals(
+                    x.MachineCode,
+                    machineCode,
+                    StringComparison.OrdinalIgnoreCase
+                )
+
+                && string.Equals(
+                    x.AlarmCode,
+                    alarmCode,
+                    StringComparison.OrdinalIgnoreCase
+                )
+
+                // 기존의 오래된 동일 Alarm을
+                // 방금 요청한 Alarm으로 오인하지 않도록 제한
+                && Math.Abs(
+                    (
+                        x.OccurredAt
+                        - occurredAt
+                    ).TotalSeconds
+                ) <= 10
+        );
+    }
+
+    // =====================================================
+    // 현재 DB 기준 생산실적 조회
+    // =====================================================
+
+    public async Task<CurrentProductionApiResponse?>
+        GetCurrentProductionAsync(
+            CancellationToken cancellationToken = default)
+    {
+        using var response =
+            await SendWithRetryAsync(
+                ct =>
+                    _httpClient.GetAsync(
+                        "api/production/current",
+                        ct
+                    ),
+
+                "현재 생산실적 조회",
+
+                enableRetry: true,
+
+                cancellationToken
+            );
+
+
+        if (response == null)
+        {
+            Console.WriteLine(
+                "[MES API] 현재 생산실적 조회 실패 - 응답 없음"
+            );
+
+            return null;
+        }
+
+
+        if (response.StatusCode ==
+            HttpStatusCode.NotFound)
+        {
+            Console.WriteLine(
+                "[MES API] 현재 활성 생산정보 없음"
+            );
+
+            return null;
+        }
+
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body =
+                await response.Content
+                    .ReadAsStringAsync(
+                        cancellationToken
+                    );
+
+
+            Console.WriteLine(
+                "[MES API] 현재 생산실적 조회 실패"
+            );
+
+            Console.WriteLine(
+                $"[MES API] HTTP {(int)response.StatusCode} {response.StatusCode}"
+            );
+
+            Console.WriteLine(
+                $"[MES API] Response: {body}"
+            );
+
+
+            return null;
+        }
+
+
+        var production =
+            await response.Content
+                .ReadFromJsonAsync<
+                    CurrentProductionApiResponse
+                >(
+                    cancellationToken:
+                        cancellationToken
+                );
+
+
+        if (production == null)
+        {
+            Console.WriteLine(
+                "[MES API] 생산실적 응답 변환 실패"
+            );
+
+            return null;
+        }
+
+
+        Console.WriteLine(
+            $"[MES API] 생산실적 조회 성공 - {production.WorkOrder.WorkOrderCode}"
+        );
+
+        Console.WriteLine(
+            $"[MES API] Produced={production.WorkOrder.ProducedQty} / Good={production.WorkOrder.GoodQty} / Defect={production.WorkOrder.DefectQty}"
+        );
+
+
+        return production;
+    }
 
     // =====================================================
     // 공통 Product GET

@@ -2,6 +2,7 @@
 using Mes.Gateway.Mqtt;
 using Mes.Gateway.Routing;
 using Mes.Gateway.Services;
+using Mes.Gateway.Plc;
 
 
 // ======================================
@@ -123,9 +124,105 @@ var qualityService =
 
 var productionService =
     new ProductionService(
-        qualityService
+        mesApiClient
     );
 
+var alarmService =
+    new AlarmService(
+        mesApiClient
+    );
+
+
+// Gateway 재시작 시
+// AWS DB에 남아 있는 ACTIVE Alarm 복구
+await alarmService
+    .SyncActiveAsync();
+
+
+// Gateway 시작 시
+// AWS RDS 기준 생산실적 복구
+await productionService
+    .RefreshAsync();
+
+// ======================================
+// PLC / MX Component
+// ======================================
+
+var plcClient =
+    new MxComponentPlcClient(
+        logicalStationNumber: 1
+    );
+
+
+Console.WriteLine();
+
+Console.WriteLine(
+    "[Gateway] PLC 연결 확인 중..."
+);
+
+
+bool plcConnected =
+    await plcClient
+        .ConnectAsync();
+
+
+if (!plcConnected)
+{
+    Console.WriteLine(
+        "[Gateway] PLC 연결 실패"
+    );
+
+    Console.WriteLine(
+        "[Gateway] Gateway를 종료합니다."
+    );
+
+
+    httpClient.Dispose();
+
+    return;
+}
+
+
+Console.WriteLine(
+    "[Gateway] PLC 연결 확인 완료"
+);
+
+//======================================
+// PLC Control Service
+//======================================
+var plcControlService =
+    new PlcControlService(
+        plcClient
+    );
+
+//======================================
+// SignalR Service
+//======================================
+var gatewaySignalRService =
+    new GatewaySignalRService(
+        mesServerBaseUrl,
+        plcControlService
+    );
+
+// ======================================
+// PLC Polling Service
+// ======================================
+
+var plcPollingService =
+    new PlcPollingService(
+        plcClient,
+        alarmService,
+        machineCode: "PRESS"
+    );
+
+
+using var gatewayCts =
+    new CancellationTokenSource();
+
+
+// ======================================
+// MES Dashboard Service
+// ======================================
 
 var dashboardService =
     new MesDashboardService(
@@ -133,9 +230,9 @@ var dashboardService =
         productionService
     );
 
+
 var activeProductService =
     new ActiveProductService();
-
 
 // ======================================
 // MQTT Router
@@ -149,7 +246,6 @@ var router =
         dashboardService,
         activeProductService,
         mesApiClient
-        
     );
 
 
@@ -161,6 +257,31 @@ var mqttService =
     new MqttClientService(
         router
     );
+
+// ======================================
+// SignalR Start
+// ======================================
+
+try
+{
+await gatewaySignalRService
+    .StartAsync();
+}
+catch (Exception ex)
+{
+Console.WriteLine(
+    $"[ERROR] SignalR 연결 실패: {ex.Message}"
+);
+
+
+await plcClient
+    .DisconnectAsync();
+
+
+httpClient.Dispose();
+
+return;
+}
 
 
 // ======================================
@@ -180,10 +301,26 @@ catch (Exception ex)
         $"[ERROR] Gateway 시작 실패: {ex.Message}"
     );
 
+
+    await plcClient
+        .DisconnectAsync();
+
+
     httpClient.Dispose();
 
     return;
 }
+
+
+// ======================================
+// PLC Polling Start
+// ======================================
+
+Task plcPollingTask =
+    plcPollingService
+        .RunAsync(
+            gatewayCts.Token
+        );
 
 
 // ======================================
@@ -215,6 +352,35 @@ Console.ReadLine();
 
 
 // ======================================
+// PLC Polling Stop
+// ======================================
+
+gatewayCts.Cancel();
+
+
+try
+{
+    await plcPollingTask;
+}
+catch (OperationCanceledException)
+{
+}
+
+// SignalR Stop
+try
+{
+    await gatewaySignalRService
+        .StopAsync();
+}
+catch (Exception ex)
+{
+    Console.WriteLine(
+        $"[ERROR] SignalR 종료 중 오류: {ex.Message}"
+    );
+}
+
+
+// ======================================
 // MQTT Stop
 // ======================================
 
@@ -230,6 +396,28 @@ catch (Exception ex)
     );
 }
 
+
+// ======================================
+// PLC Disconnect
+// ======================================
+
+try
+{
+    await plcClient
+        .DisconnectAsync();
+}
+catch (Exception ex)
+{
+    Console.WriteLine(
+        $"[ERROR] PLC 종료 중 오류: {ex.Message}"
+    );
+}
+
+//======================================
+// SignalR Dispose
+//======================================
+await gatewaySignalRService
+    .DisposeAsync();
 
 // ======================================
 // HTTP Client Dispose
