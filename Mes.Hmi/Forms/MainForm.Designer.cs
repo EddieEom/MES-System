@@ -233,23 +233,23 @@
             Lbl_CurrentTime.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             Lbl_CurrentTime.AutoSize = true;
             Lbl_CurrentTime.BackColor = Color.Transparent;
-            Lbl_CurrentTime.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            Lbl_CurrentTime.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
             Lbl_CurrentTime.ForeColor = Color.White;
-            Lbl_CurrentTime.Location = new Point(1365, 18);
+            Lbl_CurrentTime.Location = new Point(1306, 20);
             Lbl_CurrentTime.Name = "Lbl_CurrentTime";
-            Lbl_CurrentTime.Size = new Size(104, 17);
+            Lbl_CurrentTime.Size = new Size(159, 20);
             Lbl_CurrentTime.TabIndex = 1;
-            Lbl_CurrentTime.Text = "2026-09-29 시간";
+            Lbl_CurrentTime.Text = "2026-09-29 00:00:00";
             // 
             // Lbl_Title
             // 
             Lbl_Title.AutoSize = true;
             Lbl_Title.BackColor = Color.Transparent;
-            Lbl_Title.Font = new Font("Segoe UI", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            Lbl_Title.Font = new Font("Segoe UI", 16F, FontStyle.Bold);
             Lbl_Title.ForeColor = Color.White;
             Lbl_Title.Location = new Point(20, 14);
             Lbl_Title.Name = "Lbl_Title";
-            Lbl_Title.Size = new Size(105, 30);
+            Lbl_Title.Size = new Size(109, 30);
             Lbl_Title.TabIndex = 0;
             Lbl_Title.Text = "MES HMI";
             // 
