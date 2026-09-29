@@ -1441,7 +1441,7 @@
             // Lbl_ProcessVm1State
             // 
             Lbl_ProcessVm1State.AutoSize = true;
-            Lbl_ProcessVm1State.Location = new Point(63, 20);
+            Lbl_ProcessVm1State.Location = new Point(63, 30);
             Lbl_ProcessVm1State.Name = "Lbl_ProcessVm1State";
             Lbl_ProcessVm1State.Size = new Size(22, 15);
             Lbl_ProcessVm1State.TabIndex = 1;
@@ -1473,7 +1473,7 @@
             // label4
             // 
             label4.AutoSize = true;
-            label4.Location = new Point(63, 20);
+            label4.Location = new Point(63, 30);
             label4.Name = "label4";
             label4.Size = new Size(22, 15);
             label4.TabIndex = 2;
@@ -1483,7 +1483,7 @@
             // Lbl_ProcessPressTitle
             // 
             Lbl_ProcessPressTitle.AutoSize = true;
-            Lbl_ProcessPressTitle.Location = new Point(60, 5);
+            Lbl_ProcessPressTitle.Location = new Point(58, 5);
             Lbl_ProcessPressTitle.Name = "Lbl_ProcessPressTitle";
             Lbl_ProcessPressTitle.Size = new Size(39, 15);
             Lbl_ProcessPressTitle.TabIndex = 1;
@@ -1517,7 +1517,7 @@
             // Lbl_ProcessQualityState
             // 
             Lbl_ProcessQualityState.AutoSize = true;
-            Lbl_ProcessQualityState.Location = new Point(63, 20);
+            Lbl_ProcessQualityState.Location = new Point(63, 30);
             Lbl_ProcessQualityState.Name = "Lbl_ProcessQualityState";
             Lbl_ProcessQualityState.Size = new Size(22, 15);
             Lbl_ProcessQualityState.TabIndex = 2;
@@ -1527,9 +1527,9 @@
             // Lbl_ProcessQualityTitle
             // 
             Lbl_ProcessQualityTitle.AutoSize = true;
-            Lbl_ProcessQualityTitle.Location = new Point(38, 5);
+            Lbl_ProcessQualityTitle.Location = new Point(36, 5);
             Lbl_ProcessQualityTitle.Name = "Lbl_ProcessQualityTitle";
-            Lbl_ProcessQualityTitle.Size = new Size(95, 15);
+            Lbl_ProcessQualityTitle.Size = new Size(96, 15);
             Lbl_ProcessQualityTitle.TabIndex = 1;
             Lbl_ProcessQualityTitle.Text = "QUALITY CHECK";
             Lbl_ProcessQualityTitle.TextAlign = ContentAlignment.MiddleCenter;
@@ -1610,7 +1610,7 @@
             Lbl_FailDestination.BackColor = Color.LightCoral;
             Lbl_FailDestination.Location = new Point(195, 10);
             Lbl_FailDestination.Name = "Lbl_FailDestination";
-            Lbl_FailDestination.Size = new Size(61, 15);
+            Lbl_FailDestination.Size = new Size(62, 15);
             Lbl_FailDestination.TabIndex = 2;
             Lbl_FailDestination.Text = "NG STACK";
             // 
