@@ -1,7 +1,8 @@
 ﻿using Mes.Server.Database;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
-namespace Mes.Server.Controllers.System;
+namespace Mes.Server.Controllers;
 
 [ApiController]
 [Route("api/database")]
@@ -16,9 +17,20 @@ public class DatabaseController : ControllerBase
     }
 
 
+    // ==========================================
+    // Database Health Check
+    //
+    // 1. 실제 DB 연결 확인
+    // 2. MES_SYSTEM 연결 확인
+    // 3. 필수 Table 10개 확인
+    // 4. Stored Procedure 3개 확인
+    // ==========================================
     [HttpGet("health")]
-    public async Task<IActionResult> Health()
+    public async Task<IActionResult> HealthAsync()
     {
+        const int expectedTableCount = 10;
+        const int expectedProcedureCount = 3;
+
         try
         {
             await using var connection =
@@ -27,78 +39,143 @@ public class DatabaseController : ControllerBase
             await connection.OpenAsync();
 
 
-            // 현재 DB 확인
-            await using var dbCommand =
-                connection.CreateCommand();
+            const string sql = """
+                SELECT
+                    DB_NAME() AS database_name,
 
-            dbCommand.CommandText =
-                "SELECT DB_NAME();";
+                    (
+                        SELECT COUNT(*)
+                        FROM sys.tables
+                        WHERE name IN
+                        (
+                            'users',
+                            'work_orders',
+                            'lots',
+                            'machines',
+                            'locations',
+                            'products',
+                            'process_events',
+                            'quality_results',
+                            'machine_status_history',
+                            'alarms'
+                        )
+                    ) AS table_count,
 
-            var databaseName =
-                await dbCommand.ExecuteScalarAsync();
-
-
-            // MES Table 확인
-            await using var tableCommand =
-                connection.CreateCommand();
-
-            tableCommand.CommandText = """
-                SELECT COUNT(*)
-                FROM sys.tables
-                WHERE name IN
-                (
-                    'users',
-                    'work_orders',
-                    'lots',
-                    'machines',
-                    'locations',
-                    'products',
-                    'process_events',
-                    'quality_results',
-                    'machine_status_history',
-                    'alarms'
-                );
+                    (
+                        SELECT COUNT(*)
+                        FROM sys.procedures
+                        WHERE name IN
+                        (
+                            'usp_CreateWorkOrder',
+                            'usp_MoveProduct',
+                            'usp_RecordQualityResult'
+                        )
+                    ) AS procedure_count;
                 """;
 
-            var tableCount =
-                Convert.ToInt32(
-                    await tableCommand.ExecuteScalarAsync()
+
+            await using var command =
+                new SqlCommand(
+                    sql,
+                    connection
                 );
 
 
-            // Stored Procedure 확인
-            await using var procedureCommand =
-                connection.CreateCommand();
-
-            procedureCommand.CommandText = """
-                SELECT COUNT(*)
-                FROM sys.procedures
-                WHERE name IN
-                (
-                    'usp_CreateWorkOrder',
-                    'usp_MoveProduct',
-                    'usp_RecordQualityResult'
-                );
-                """;
-
-            var procedureCount =
-                Convert.ToInt32(
-                    await procedureCommand.ExecuteScalarAsync()
-                );
+            await using var reader =
+                await command.ExecuteReaderAsync();
 
 
-            return Ok(new
+            if (!await reader.ReadAsync())
             {
-                status = "ok",
-                database = databaseName,
-                tables = $"{tableCount}/10",
-                storedProcedures = $"{procedureCount}/3"
-            });
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        status = "error",
+                        message =
+                            "Database Health 조회 결과가 없습니다."
+                    }
+                );
+            }
+
+
+            string databaseName =
+                reader["database_name"]
+                    ?.ToString()
+                ?? string.Empty;
+
+
+            int tableCount =
+                Convert.ToInt32(
+                    reader["table_count"]
+                );
+
+
+            int procedureCount =
+                Convert.ToInt32(
+                    reader["procedure_count"]
+                );
+
+
+            bool isHealthy =
+                databaseName == "MES_SYSTEM"
+                && tableCount == expectedTableCount
+                && procedureCount == expectedProcedureCount;
+
+
+            if (!isHealthy)
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        status = "degraded",
+
+                        database =
+                            databaseName,
+
+                        tables =
+                            $"{tableCount}/{expectedTableCount}",
+
+                        storedProcedures =
+                            $"{procedureCount}/{expectedProcedureCount}"
+                    }
+                );
+            }
+
+
+            return Ok(
+                new
+                {
+                    status = "ok",
+
+                    database =
+                        databaseName,
+
+                    tables =
+                        $"{tableCount}/{expectedTableCount}",
+
+                    storedProcedures =
+                        $"{procedureCount}/{expectedProcedureCount}"
+                }
+            );
+        }
+        catch (SqlException ex)
+        {
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new
+                {
+                    status = "error",
+                    database = "unavailable",
+                    message = ex.Message
+                }
+            );
         }
         catch (Exception ex)
         {
             return StatusCode(
-                500,
+                StatusCodes.Status500InternalServerError,
                 new
                 {
                     status = "error",

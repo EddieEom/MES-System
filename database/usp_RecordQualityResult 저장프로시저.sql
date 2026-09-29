@@ -31,7 +31,7 @@ LOT 완료 = PASS + FAIL = 60
 ============================================================
 */
 USE MES_SYSTEM;
-
+GO
 CREATE PROCEDURE dbo.usp_RecordQualityResult
     @EventId                UNIQUEIDENTIFIER,
     @ProductId              BIGINT,
