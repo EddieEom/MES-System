@@ -134,13 +134,13 @@ var alarmService =
 
 
 // Gateway 재시작 시
-// AWS DB에 남아 있는 ACTIVE Alarm 복구
+// Mes.Server 기준 ACTIVE Alarm 상태 동기화
 await alarmService
     .SyncActiveAsync();
 
 
 // Gateway 시작 시
-// AWS RDS 기준 생산실적 복구
+// Mes.Server 기준 생산실적 동기화
 await productionService
     .RefreshAsync();
 

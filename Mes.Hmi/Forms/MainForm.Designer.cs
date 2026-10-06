@@ -64,7 +64,7 @@
             Pnl_LotCard = new Panel();
             Tlp_Lot = new TableLayoutPanel();
             Lbl_LotProgress = new Label();
-            Lbl_LotQuantity = new Label();
+            Lbl_LotProduction = new Label();
             Lbl_LotQuantityTitle = new Label();
             Lbl_LotStatus = new Label();
             Lbl_LotStatusTitle = new Label();
@@ -115,6 +115,11 @@
             Lbl_ActiveAlarmCount = new Label();
             Lbl_AlarmAreaTitle = new Label();
             Dgv_ActiveAlarms = new DataGridView();
+            colOccurredAt = new DataGridViewTextBoxColumn();
+            colMachineCode = new DataGridViewTextBoxColumn();
+            colSeverity = new DataGridViewTextBoxColumn();
+            colAlarmCode = new DataGridViewTextBoxColumn();
+            colAlarmMessage = new DataGridViewTextBoxColumn();
             Pnl_AlarmArea = new Panel();
             Tlp_ProcessFlow = new TableLayoutPanel();
             Lbl_ProcessFlowTitle = new Label();
@@ -123,7 +128,7 @@
             Lbl_ProcessVm1State = new Label();
             Lbl_ProcessVm1Title = new Label();
             Pnl_ProcessPress = new Panel();
-            label4 = new Label();
+            Lbl_ProcessPressState = new Label();
             Lbl_ProcessPressTitle = new Label();
             Lbl_ArrowPressQuality = new Label();
             Pnl_ProcessQuality = new Panel();
@@ -141,6 +146,12 @@
             Tlp_EventArea = new TableLayoutPanel();
             Lbl_EventAreaTitle = new Label();
             Dgv_RecentEvents = new DataGridView();
+            Col_EventTime = new DataGridViewTextBoxColumn();
+            Col_ProductCode = new DataGridViewTextBoxColumn();
+            Col_EventType = new DataGridViewTextBoxColumn();
+            Col_FromLocation = new DataGridViewTextBoxColumn();
+            Col_ToLocation = new DataGridViewTextBoxColumn();
+            Col_Remarks = new DataGridViewTextBoxColumn();
             Pnl_ControlArea = new Panel();
             Tlp_Control = new TableLayoutPanel();
             Btn_Reset = new Button();
@@ -671,7 +682,7 @@
             Tlp_Lot.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64F));
             Tlp_Lot.Controls.Add(Lbl_LotProgress, 1, 4);
             Tlp_Lot.Controls.Add(Lbl_LotProgressTitle, 0, 4);
-            Tlp_Lot.Controls.Add(Lbl_LotQuantity, 1, 3);
+            Tlp_Lot.Controls.Add(Lbl_LotProduction, 1, 3);
             Tlp_Lot.Controls.Add(Lbl_LotQuantityTitle, 0, 3);
             Tlp_Lot.Controls.Add(Lbl_LotStatus, 1, 2);
             Tlp_Lot.Controls.Add(Lbl_LotStatusTitle, 0, 2);
@@ -705,16 +716,16 @@
             Lbl_LotProgress.TabIndex = 9;
             Lbl_LotProgress.Text = "0.00 %";
             // 
-            // Lbl_LotQuantity
+            // Lbl_LotProduction
             // 
-            Lbl_LotQuantity.AutoSize = true;
-            Lbl_LotQuantity.Dock = DockStyle.Fill;
-            Lbl_LotQuantity.Location = new Point(118, 102);
-            Lbl_LotQuantity.Margin = new Padding(0);
-            Lbl_LotQuantity.Name = "Lbl_LotQuantity";
-            Lbl_LotQuantity.Size = new Size(194, 28);
-            Lbl_LotQuantity.TabIndex = 7;
-            Lbl_LotQuantity.Text = "0 / 60 EA";
+            Lbl_LotProduction.AutoSize = true;
+            Lbl_LotProduction.Dock = DockStyle.Fill;
+            Lbl_LotProduction.Location = new Point(118, 102);
+            Lbl_LotProduction.Margin = new Padding(0);
+            Lbl_LotProduction.Name = "Lbl_LotProduction";
+            Lbl_LotProduction.Size = new Size(194, 28);
+            Lbl_LotProduction.TabIndex = 7;
+            Lbl_LotProduction.Text = "0 / 60 EA";
             // 
             // Lbl_LotQuantityTitle
             // 
@@ -1354,6 +1365,7 @@
             Dgv_ActiveAlarms.BackgroundColor = Color.White;
             Dgv_ActiveAlarms.BorderStyle = BorderStyle.None;
             Dgv_ActiveAlarms.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            Dgv_ActiveAlarms.Columns.AddRange(new DataGridViewColumn[] { colOccurredAt, colMachineCode, colSeverity, colAlarmCode, colAlarmMessage });
             Dgv_ActiveAlarms.Dock = DockStyle.Fill;
             Dgv_ActiveAlarms.Location = new Point(0, 40);
             Dgv_ActiveAlarms.Margin = new Padding(0, 4, 0, 0);
@@ -1364,6 +1376,41 @@
             Dgv_ActiveAlarms.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             Dgv_ActiveAlarms.Size = new Size(805, 63);
             Dgv_ActiveAlarms.TabIndex = 1;
+            // 
+            // colOccurredAt
+            // 
+            colOccurredAt.DataPropertyName = "OccurredAt";
+            colOccurredAt.HeaderText = "발생시간";
+            colOccurredAt.Name = "colOccurredAt";
+            colOccurredAt.ReadOnly = true;
+            // 
+            // colMachineCode
+            // 
+            colMachineCode.DataPropertyName = "MachineCode";
+            colMachineCode.HeaderText = "설비";
+            colMachineCode.Name = "colMachineCode";
+            colMachineCode.ReadOnly = true;
+            // 
+            // colSeverity
+            // 
+            colSeverity.DataPropertyName = "Severity";
+            colSeverity.HeaderText = "등급";
+            colSeverity.Name = "colSeverity";
+            colSeverity.ReadOnly = true;
+            // 
+            // colAlarmCode
+            // 
+            colAlarmCode.DataPropertyName = "AlarmCode";
+            colAlarmCode.HeaderText = "알람코드";
+            colAlarmCode.Name = "colAlarmCode";
+            colAlarmCode.ReadOnly = true;
+            // 
+            // colAlarmMessage
+            // 
+            colAlarmMessage.DataPropertyName = "AlarmMessage";
+            colAlarmMessage.HeaderText = "알람내용";
+            colAlarmMessage.Name = "colAlarmMessage";
+            colAlarmMessage.ReadOnly = true;
             // 
             // Pnl_AlarmArea
             // 
@@ -1461,7 +1508,7 @@
             // Pnl_ProcessPress
             // 
             Pnl_ProcessPress.BackColor = Color.WhiteSmoke;
-            Pnl_ProcessPress.Controls.Add(label4);
+            Pnl_ProcessPress.Controls.Add(Lbl_ProcessPressState);
             Pnl_ProcessPress.Controls.Add(Lbl_ProcessPressTitle);
             Pnl_ProcessPress.Dock = DockStyle.Fill;
             Pnl_ProcessPress.Location = new Point(237, 8);
@@ -1470,15 +1517,15 @@
             Pnl_ProcessPress.Size = new Size(156, 60);
             Pnl_ProcessPress.TabIndex = 2;
             // 
-            // label4
+            // Lbl_ProcessPressState
             // 
-            label4.AutoSize = true;
-            label4.Location = new Point(63, 30);
-            label4.Name = "label4";
-            label4.Size = new Size(22, 15);
-            label4.TabIndex = 2;
-            label4.Text = "---";
-            label4.TextAlign = ContentAlignment.MiddleCenter;
+            Lbl_ProcessPressState.AutoSize = true;
+            Lbl_ProcessPressState.Location = new Point(63, 30);
+            Lbl_ProcessPressState.Name = "Lbl_ProcessPressState";
+            Lbl_ProcessPressState.Size = new Size(22, 15);
+            Lbl_ProcessPressState.TabIndex = 2;
+            Lbl_ProcessPressState.Text = "---";
+            Lbl_ProcessPressState.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // Lbl_ProcessPressTitle
             // 
@@ -1672,6 +1719,7 @@
             Dgv_RecentEvents.BackgroundColor = Color.White;
             Dgv_RecentEvents.BorderStyle = BorderStyle.None;
             Dgv_RecentEvents.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            Dgv_RecentEvents.Columns.AddRange(new DataGridViewColumn[] { Col_EventTime, Col_ProductCode, Col_EventType, Col_FromLocation, Col_ToLocation, Col_Remarks });
             Dgv_RecentEvents.Dock = DockStyle.Fill;
             Dgv_RecentEvents.Location = new Point(0, 40);
             Dgv_RecentEvents.Margin = new Padding(0, 4, 0, 0);
@@ -1683,6 +1731,61 @@
             Dgv_RecentEvents.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             Dgv_RecentEvents.Size = new Size(632, 63);
             Dgv_RecentEvents.TabIndex = 1;
+            // 
+            // Col_EventTime
+            // 
+            Col_EventTime.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            Col_EventTime.DataPropertyName = "EventTime";
+            Col_EventTime.Frozen = true;
+            Col_EventTime.HeaderText = "발생시간";
+            Col_EventTime.Name = "Col_EventTime";
+            Col_EventTime.ReadOnly = true;
+            Col_EventTime.Width = 126;
+            // 
+            // Col_ProductCode
+            // 
+            Col_ProductCode.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            Col_ProductCode.DataPropertyName = "ProductCode";
+            Col_ProductCode.FillWeight = 155F;
+            Col_ProductCode.Frozen = true;
+            Col_ProductCode.HeaderText = "제품코드";
+            Col_ProductCode.Name = "Col_ProductCode";
+            Col_ProductCode.ReadOnly = true;
+            Col_ProductCode.Width = 126;
+            // 
+            // Col_EventType
+            // 
+            Col_EventType.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            Col_EventType.DataPropertyName = "EventType";
+            Col_EventType.FillWeight = 75F;
+            Col_EventType.HeaderText = "이벤트";
+            Col_EventType.Name = "Col_EventType";
+            Col_EventType.ReadOnly = true;
+            Col_EventType.Width = 127;
+            // 
+            // Col_FromLocation
+            // 
+            Col_FromLocation.DataPropertyName = "FromLocationCode";
+            Col_FromLocation.FillWeight = 85F;
+            Col_FromLocation.HeaderText = "이전위치";
+            Col_FromLocation.Name = "Col_FromLocation";
+            Col_FromLocation.ReadOnly = true;
+            // 
+            // Col_ToLocation
+            // 
+            Col_ToLocation.DataPropertyName = "ToLocationCode";
+            Col_ToLocation.FillWeight = 85F;
+            Col_ToLocation.HeaderText = "현재위치";
+            Col_ToLocation.Name = "Col_ToLocation";
+            Col_ToLocation.ReadOnly = true;
+            // 
+            // Col_Remarks
+            // 
+            Col_Remarks.DataPropertyName = "Remarks";
+            Col_Remarks.FillWeight = 200F;
+            Col_Remarks.HeaderText = "내용";
+            Col_Remarks.Name = "Col_Remarks";
+            Col_Remarks.ReadOnly = true;
             // 
             // Pnl_ControlArea
             // 
@@ -1725,6 +1828,7 @@
             Btn_Reset.TabIndex = 2;
             Btn_Reset.Text = "RESET";
             Btn_Reset.UseVisualStyleBackColor = false;
+            Btn_Reset.Click += Btn_Reset_Click;
             // 
             // Btn_Stop
             // 
@@ -1739,6 +1843,7 @@
             Btn_Stop.TabIndex = 1;
             Btn_Stop.Text = "STOP";
             Btn_Stop.UseVisualStyleBackColor = false;
+            Btn_Stop.Click += Btn_Stop_Click;
             // 
             // Btn_Start
             // 
@@ -1753,6 +1858,7 @@
             Btn_Start.TabIndex = 0;
             Btn_Start.Text = "START";
             Btn_Start.UseVisualStyleBackColor = false;
+            Btn_Start.Click += Btn_Start_Click;
             // 
             // MainForm
             // 
@@ -1851,7 +1957,7 @@
         private Label Lbl_WorkOrderCode;
         private TableLayoutPanel Tlp_Lot;
         private Label Lbl_LotProgress;
-        private Label Lbl_LotQuantity;
+        private Label Lbl_LotProduction;
         private Label Lbl_LotQuantityTitle;
         private Label Lbl_LotStatus;
         private Label Lbl_LotStatusTitle;
@@ -1926,7 +2032,7 @@
         private Panel Pnl_ProcessPress;
         private Label Lbl_ArrowPressQuality;
         private Panel Pnl_ProcessQuality;
-        private Label label4;
+        private Label Lbl_ProcessPressState;
         private Label Lbl_ProcessPressTitle;
         private Label Lbl_ProcessQualityState;
         private Label Lbl_ProcessQualityTitle;
@@ -1945,5 +2051,16 @@
         private TableLayoutPanel Tlp_EventArea;
         private Label Lbl_EventAreaTitle;
         private DataGridView Dgv_RecentEvents;
+        private DataGridViewTextBoxColumn colOccurredAt;
+        private DataGridViewTextBoxColumn colMachineCode;
+        private DataGridViewTextBoxColumn colSeverity;
+        private DataGridViewTextBoxColumn colAlarmCode;
+        private DataGridViewTextBoxColumn colAlarmMessage;
+        private DataGridViewTextBoxColumn Col_EventTime;
+        private DataGridViewTextBoxColumn Col_ProductCode;
+        private DataGridViewTextBoxColumn Col_EventType;
+        private DataGridViewTextBoxColumn Col_FromLocation;
+        private DataGridViewTextBoxColumn Col_ToLocation;
+        private DataGridViewTextBoxColumn Col_Remarks;
     }
 }

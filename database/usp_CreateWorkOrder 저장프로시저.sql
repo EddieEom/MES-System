@@ -32,7 +32,7 @@ Stored Procedure로 구현한다.
 ============================================================
 */
 
-CREATE PROCEDURE dbo.usp_CreateWorkOrder
+CREATE OR ALTER PROCEDURE dbo.usp_CreateWorkOrder
     @WorkOrderCode      VARCHAR(30),
     @CreatedByUserId    BIGINT = NULL
 AS

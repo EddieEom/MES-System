@@ -8,9 +8,9 @@ public sealed class PlcControlService
 
     // 현재 시뮬레이션용 Device Map
     // 실제 PLC 주소표 변경 시 여기에서 변경함.
-    private const string StartDevice = "M100";
-    private const string StopDevice = "M101";
-    private const string ResetDevice = "M102";
+    private const string StartDevice = "M0";
+    private const string StopDevice = "M1";
+    private const string ResetDevice = "M2";
 
     private const int CommandPulseMilliseconds = 300;
 

@@ -118,4 +118,33 @@ public class ProcessController
 
         return Ok(events);
     }
+
+    // =====================================================
+    // 최근 공정 이벤트 조회
+    //
+    // HMI 대시보드용
+    // 기본 10건 / 최대 100건
+    // =====================================================
+    [HttpGet("recent")]
+    public async Task<ActionResult<IReadOnlyList<ProcessEventInfo>>>
+        GetRecentEvents(
+            [FromQuery] int count = 10)
+    {
+        if (count < 1 || count > 100)
+        {
+            return BadRequest(
+                new
+                {
+                    message =
+                        "count는 1 이상 100 이하이어야 합니다."
+                }
+            );
+        }
+
+        var events =
+            await _repository
+                .GetRecentEventsAsync(count);
+
+        return Ok(events);
+    }
 }

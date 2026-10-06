@@ -212,9 +212,9 @@ public sealed class MxComponentPlcClient :
             );
 
 
-        Console.WriteLine(
-            $"[PLC] GetDevice({device}) 결과: 0x{result.ResultCode:X8}"
-        );
+        //Console.WriteLine(
+        //    $"[PLC] GetDevice({device}) 결과: 0x{result.ResultCode:X8}"
+        //);
 
 
         if (result.ResultCode != 0)

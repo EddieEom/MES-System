@@ -323,4 +323,167 @@ public class ProcessRepository
 
         return events;
     }
+
+    // =====================================================
+    // 최근 공정 이벤트 조회
+    //
+    // HMI 대시보드용
+    // 전체 제품의 최근 공정 이벤트를 최신순으로 조회
+    // =====================================================
+    public async Task<IReadOnlyList<ProcessEventInfo>>
+        GetRecentEventsAsync(int count)
+    {
+        var events =
+            new List<ProcessEventInfo>();
+
+        await using var connection =
+            _connectionFactory.CreateConnection();
+
+        await connection.OpenAsync();
+
+        const string sql = """
+        SELECT TOP (@Count)
+            pe.process_event_id,
+            pe.event_id,
+            pe.product_id,
+            p.product_code,
+
+            pe.machine_id,
+            m.machine_code,
+
+            pe.event_type,
+
+            pe.from_location_id,
+            from_loc.location_code
+                AS from_location_code,
+
+            pe.to_location_id,
+            to_loc.location_code
+                AS to_location_code,
+
+            pe.event_time,
+            pe.source_system,
+            pe.remarks,
+            pe.created_at
+
+        FROM process_events pe
+
+        INNER JOIN products p
+            ON pe.product_id = p.product_id
+
+        LEFT JOIN machines m
+            ON pe.machine_id = m.machine_id
+
+        LEFT JOIN locations from_loc
+            ON pe.from_location_id =
+               from_loc.location_id
+
+        LEFT JOIN locations to_loc
+            ON pe.to_location_id =
+               to_loc.location_id
+
+        ORDER BY
+            pe.event_time DESC,
+            pe.process_event_id DESC;
+        """;
+
+        await using var command =
+            new SqlCommand(
+                sql,
+                connection
+            );
+
+        command.Parameters.Add(
+            "@Count",
+            SqlDbType.Int
+        ).Value = count;
+
+        await using var reader =
+            await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            var eventTimeUtc =
+                DateTime.SpecifyKind(
+                    reader.GetDateTime(11),
+                    DateTimeKind.Utc
+                );
+
+            var createdAtUtc =
+                DateTime.SpecifyKind(
+                    reader.GetDateTime(14),
+                    DateTimeKind.Utc
+                );
+
+            events.Add(
+                new ProcessEventInfo
+                {
+                    ProcessEventId =
+                        reader.GetInt64(0),
+
+                    EventId =
+                        reader.GetGuid(1),
+
+                    ProductId =
+                        reader.GetInt64(2),
+
+                    ProductCode =
+                        reader.GetString(3),
+
+                    MachineId =
+                        reader.IsDBNull(4)
+                            ? null
+                            : reader.GetInt32(4),
+
+                    MachineCode =
+                        reader.IsDBNull(5)
+                            ? null
+                            : reader.GetString(5),
+
+                    EventType =
+                        reader.GetString(6),
+
+                    FromLocationId =
+                        reader.IsDBNull(7)
+                            ? null
+                            : reader.GetInt32(7),
+
+                    FromLocationCode =
+                        reader.IsDBNull(8)
+                            ? null
+                            : reader.GetString(8),
+
+                    ToLocationId =
+                        reader.IsDBNull(9)
+                            ? null
+                            : reader.GetInt32(9),
+
+                    ToLocationCode =
+                        reader.IsDBNull(10)
+                            ? null
+                            : reader.GetString(10),
+
+                    EventTime =
+                        new DateTimeOffset(
+                            eventTimeUtc
+                        ),
+
+                    SourceSystem =
+                        reader.GetString(12),
+
+                    Remarks =
+                        reader.IsDBNull(13)
+                            ? null
+                            : reader.GetString(13),
+
+                    CreatedAt =
+                        new DateTimeOffset(
+                            createdAtUtc
+                        )
+                }
+            );
+        }
+
+        return events;
+    }
 }

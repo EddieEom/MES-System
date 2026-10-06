@@ -4,12 +4,11 @@ namespace Mes.Server.Repositories.Process;
 
 public interface IProcessRepository
 {
-    Task<MoveProductResult> MoveProductAsync(
-        MoveProductRequest request
-    );
+    Task<MoveProductResult> MoveProductAsync(MoveProductRequest request);
 
     Task<IReadOnlyList<ProcessEventInfo>>
-        GetProductHistoryAsync(
-            string productCode
-        );
+        GetProductHistoryAsync(string productCode);
+
+    Task<IReadOnlyList<ProcessEventInfo>>
+    GetRecentEventsAsync(int count);
 }
