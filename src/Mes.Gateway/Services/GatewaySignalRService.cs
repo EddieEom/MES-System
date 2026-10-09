@@ -36,15 +36,7 @@ public sealed class GatewaySignalRService :
                 .WithUrl(
                     hubUrl
                 )
-                .WithAutomaticReconnect(
-                    new[]
-                    {
-                        TimeSpan.Zero,
-                        TimeSpan.FromSeconds(2),
-                        TimeSpan.FromSeconds(5),
-                        TimeSpan.FromSeconds(10)
-                    }
-                )
+                .WithAutomaticReconnect(new InfiniteRetryPolicy())
                 .Build();
 
 
@@ -228,5 +220,27 @@ public sealed class GatewaySignalRService :
     {
         await _connection
             .DisposeAsync();
+    }
+}
+
+internal sealed class InfiniteRetryPolicy : IRetryPolicy
+{
+    public TimeSpan? NextRetryDelay(
+        RetryContext retryContext)
+    {
+        // 첫 재연결은 즉시
+        if (retryContext.PreviousRetryCount == 0)
+            return TimeSpan.Zero;
+
+        // 두 번째
+        if (retryContext.PreviousRetryCount == 1)
+            return TimeSpan.FromSeconds(2);
+
+        // 세 번째
+        if (retryContext.PreviousRetryCount == 2)
+            return TimeSpan.FromSeconds(5);
+
+        // 이후에는 계속 10초마다 재시도
+        return TimeSpan.FromSeconds(10);
     }
 }

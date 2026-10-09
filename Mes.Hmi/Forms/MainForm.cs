@@ -19,14 +19,41 @@ namespace Mes.Hmi.Forms
     public partial class MainForm : Form
     {
         // CencellationTokenSource 생성
+
+        // 시간 표시용 CancellationTokenSource
         private CancellationTokenSource? _clockCts;
+
+        // mes.Server API 호출용 HttpClient
         private readonly MesServerClient _mesServerClient;
+
+        // 대시보드 Polling용 CancellationTokenSource
         private CancellationTokenSource? _dashboardCts;
 
+        // 마지막으로 조회한 알람과 공정 이벤트의 시그니처를 저장하여 중복 업데이트 방지
+        private string _lastAlarmSignature = string.Empty;
+        private string _lastProcessEventSignature = string.Empty;
+
+        // QUALITY CHECK UI 상태 관리
+        private string? _latestPressState;
+        private string? _latestQualityRoute;
+        private string? _latestPressProductCode;
+
+        // 현재 HMI 세션에서 PLC START가 수행되었는지 여부
+        private bool _plcSessionStarted = false;
+
+        // PLC 제어 명령 전송 중 여부를 나타내는 플래그 (중복 클릭 방지용)
+        private bool _plcCommandInProgress = false;
+
+        // 전체 화면 모드 여부를 나타내는 플래그
+        private bool _isFullScreen = false;
 
         public MainForm()
         {
             InitializeComponent();
+            ApplyDashboardTheme();
+            //===============================
+            // DataGridView 컬럼 자동 생성 비활성화
+            //===============================
             Dgv_RecentEvents.AutoGenerateColumns = false;
             Dgv_ActiveAlarms.AutoGenerateColumns = false;
 
@@ -160,8 +187,13 @@ namespace Mes.Hmi.Forms
                 ProductionInfo? production =
                     await _mesServerClient.GetCurrentProductionAsync();
 
+                // 최근 생산 정보가 없으면 UI 초기화
                 if (production == null)
+                {
+                    ResetProductionUi();
+                    ResetLotUi();
                     return;
+                }
 
                 // =========================
                 // 현재 작업지시
@@ -185,6 +217,11 @@ namespace Mes.Hmi.Forms
                     Lbl_Defect.Text = $"{wo.DefectQty:N0} EA";
                     Lbl_Yield.Text = $"{wo.YieldRate:F2} %";
                 }
+                // 최근 작업지시가 없으면 UI 초기화
+                else
+                {
+                    ResetProductionUi();
+                }
 
                 // =========================
                 // 현재 LOT
@@ -202,11 +239,23 @@ namespace Mes.Hmi.Forms
                     Lbl_LotProgress.Text =
                         $"{lot.ProgressRate:F2} %";
 
-                    Pgb_LotProgress.Value =
+                    double progress =
                         Math.Clamp(
-                            (int)Math.Round(lot.ProgressRate),
+                            lot.ProgressRate,
                             0,
-                            100);
+                            100
+                        );
+
+                    Pnl_LotProgressFill.Width =
+                        (int)(
+                            Pnl_LotProgressTrack.ClientSize.Width
+                            * progress / 100.0
+                        );
+                }
+                // 최근 LOT이 없으면 UI 초기화
+                else
+                {
+                    ResetLotUi();
                 }
             }
             catch (Exception ex)
@@ -223,8 +272,12 @@ namespace Mes.Hmi.Forms
                 CurrentProductInfo? product =
                     await _mesServerClient.GetCurrentProcessProductAsync();
 
+                // 최근 공정 제품이 없으면 UI 초기화
                 if (product == null)
+                {
+                    ResetCurrentProductUi();
                     return;
+                }
 
                 Lbl_ProductCode.Text =
                     product.ProductCode ?? "---";
@@ -237,14 +290,21 @@ namespace Mes.Hmi.Forms
 
                 Lbl_ProductLocation.Text =
                     product.CurrentLocationName ?? "---";
-
-                UpdateProcessFlow(product);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(
                     $"현재 제품 조회 실패: {ex.Message}");
             }
+        }
+
+        private void ResetCurrentProductUi()
+        {
+            // 최근 공정 제품이 없으면 UI 초기화
+            Lbl_ProductCode.Text = "---";
+            Lbl_ProductStatus.Text = "---";
+            Lbl_ProductQuality.Text = "---";
+            Lbl_ProductLocation.Text = "---";
         }
 
         protected override void OnFormClosed(
@@ -275,20 +335,143 @@ namespace Mes.Hmi.Forms
         {
             try
             {
+                // 활성 알람 조회
                 List<AlarmInfo> alarms =
                     await _mesServerClient.GetActiveAlarmsAsync();
 
-                Lbl_ActiveAlarmCount.Text = $"{alarms.Count}건";
+                // 활성 알람 수 표시
+                Lbl_ActiveAlarmCount.Text =
+                    $"{alarms.Count}건";
 
-                Dgv_ActiveAlarms.DataSource = alarms;
+                // 활성 알람 시그니처 생성 (중복 업데이트 방지용)
+                string signature =
+                    string.Join(
+                        "||",
+                        alarms.Select(a =>
+                            $"{a.OccurredAt}|{a.MachineCode}|{a.Severity}|{a.AlarmCode}|{a.AlarmMessage}")
+                    );
+
+                // 실제 데이터가 바뀐 경우에만 Grid 갱신
+                if (_lastAlarmSignature != signature)
+                {
+                    _lastAlarmSignature = signature;
+
+                    Dgv_ActiveAlarms.DataSource = null;
+                    Dgv_ActiveAlarms.DataSource = alarms;
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine(
-                    $"활성 알람 조회 실패: {ex.Message}");
+                    $"활성 알람 조회 실패: {ex.Message}"
+                );
             }
         }
 
+        // ====================================================
+        // 설비 상태에 따라 UI 색상 및 텍스트 업데이트
+        // ====================================================
+        private void UpdateMachineProcessState(
+            Panel panel,
+            Label label,
+            string? machineState)
+        {
+            string state =
+                machineState?
+                    .Trim()
+                    .ToUpperInvariant()
+                ?? string.Empty;
+
+            switch (state)
+            {
+                // 설비 실제 작업 중
+                case "BUSY":
+
+                    label.Text = "진행 중";
+
+                    panel.BackColor =
+                        Color.FromArgb(254, 243, 199);
+
+                    label.ForeColor =
+                        Color.FromArgb(180, 83, 9);
+
+                    break;
+
+
+                // 작업은 끝났지만 다음 설비로 배출 대기
+                case "BLOCKED":
+
+                    label.Text = "공정 완료 / 배출 대기";
+
+                    panel.BackColor =
+                        Color.FromArgb(219, 234, 254);
+
+                    label.ForeColor =
+                        Color.FromArgb(29, 78, 216);
+
+                    break;
+
+
+                // 제품 없음 / 대기 상태
+                case "IDLE":
+
+                    label.Text = "대기";
+
+                    panel.BackColor =
+                        Color.FromArgb(248, 250, 252);
+
+                    label.ForeColor =
+                        Color.FromArgb(100, 116, 139);
+
+                    break;
+
+
+                // 설비 이상
+                case "FAILED":
+
+                    label.Text = "이상";
+
+                    panel.BackColor =
+                        Color.FromArgb(254, 226, 226);
+
+                    label.ForeColor =
+                        Color.FromArgb(220, 38, 38);
+
+                    break;
+
+
+                // 수리 상태
+                case "REPAIR":
+
+                    label.Text = "수리 중";
+
+                    panel.BackColor =
+                        Color.FromArgb(243, 232, 255);
+
+                    label.ForeColor =
+                        Color.FromArgb(126, 34, 206);
+
+                    break;
+
+
+                default:
+
+                    label.Text = "---";
+
+                    panel.BackColor =
+                        Color.FromArgb(248, 250, 252);
+
+                    label.ForeColor =
+                        Color.FromArgb(100, 116, 139);
+
+                    break;
+            }
+        }
+
+
+        // =====================================================
+        // 최근 설비 상태 조회
+        // =====================================================
         private async Task LoadMachineStatusAsync()
         {
             try
@@ -304,20 +487,86 @@ namespace Mes.Hmi.Forms
                 MachineStatusInfo? vm1 = await vm1Task;
                 MachineStatusInfo? press = await pressTask;
 
+                // =====================================================
+                // HMI 실행 후 아직 PLC START를 하지 않은 상태
+                // DB에 남아 있는 이전 Blocked/Busy 상태를 표시하지 않고
+                // 공정 흐름은 대기 상태로 표시
+                // =====================================================
+
+                if (!_plcSessionStarted)
+                {
+                    UpdateMachineProcessState(
+                        Pnl_ProcessVm1,
+                        Lbl_ProcessVm1State,
+                        "IDLE"
+                    );
+
+                    UpdateMachineProcessState(
+                        Pnl_ProcessPress,
+                        Lbl_ProcessPressState,
+                        "IDLE"
+                    );
+
+                    return;
+                }
+
+                // 최근 VM1 설비 상태가 있으면 UI 업데이트
                 if (vm1 != null)
                 {
                     Lbl_Vm1State.Text = vm1.State ?? "---";
                     Lbl_Vm1Entered.Text = vm1.PartsEntered.ToString("N0");
                     Lbl_Vm1Exited.Text = vm1.PartsExited.ToString("N0");
                     Lbl_Vm1Utilization.Text = $"{vm1.Utilization:F2} %";
+
+                    // 공정 흐름 VM1 표시
+                    UpdateMachineProcessState(
+                        Pnl_ProcessVm1,
+                        Lbl_ProcessVm1State,
+                        vm1.State
+                    );
+                }
+                // 최근 VM1 설비 상태가 없으면 UI 초기화
+                else
+                {
+                    ResetVm1Ui();
+
+                    UpdateMachineProcessState(
+                        Pnl_ProcessVm1,
+                        Lbl_ProcessVm1State,
+                        null
+                    );
                 }
 
+                // 최근 PRESS 설비 상태가 있으면 UI 업데이트
                 if (press != null)
                 {
                     Lbl_PressState.Text = press.State ?? "---";
                     Lbl_PressEntered.Text = press.PartsEntered.ToString("N0");
                     Lbl_PressExited.Text = press.PartsExited.ToString("N0");
                     Lbl_PressUtilization.Text = $"{press.Utilization:F2} %";
+
+                    // 현재 PRESS 상태 저장
+                    _latestPressState = press.State;
+
+                    // 공정 흐름 PRESS 표시
+                    UpdateMachineProcessState(
+                        Pnl_ProcessPress,
+                        Lbl_ProcessPressState,
+                        press.State
+                    );
+                }
+                // 최근 PRESS 설비 상태가 없으면 UI 초기화
+                else
+                {
+                    ResetPressUi();
+
+                    UpdateMachineProcessState(
+                        Pnl_ProcessPress,
+                        Lbl_ProcessPressState,
+                        null
+                    );
+                    RefreshQualityProcessUi();
+
                 }
             }
             catch (Exception ex)
@@ -338,7 +587,101 @@ namespace Mes.Hmi.Forms
                     await _mesServerClient
                         .GetRecentProcessEventsAsync(10);
 
-                Dgv_RecentEvents.DataSource = events;
+
+                // =========================================
+                // 가장 최근 PRESS 진입 제품 찾기
+                // =========================================
+
+                ProcessEventInfo? latestPressEvent =
+                    events
+                        .Where(e =>
+                            string.Equals(
+                                e.ToLocationCode,
+                                "PRESS",
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        )
+                        .OrderByDescending(e => e.EventTime)
+                        .FirstOrDefault();
+
+
+                _latestPressProductCode =
+                    latestPressEvent?.ProductCode;
+
+
+                // =========================================
+                // 현재 PRESS 제품의 품질 Route만 찾기
+                //
+                // WAREHOUSE = PASS
+                // NG_STACK  = FAIL
+                // =========================================
+
+                ProcessEventInfo? qualityRoute = null;
+
+
+                if (!string.IsNullOrWhiteSpace(
+                        _latestPressProductCode))
+                {
+                    qualityRoute =
+                        events
+                            .Where(e =>
+                                string.Equals(
+                                    e.ProductCode,
+                                    _latestPressProductCode,
+                                    StringComparison.OrdinalIgnoreCase
+                                )
+                                &&
+                                (
+                                    string.Equals(
+                                        e.ToLocationCode,
+                                        "WAREHOUSE",
+                                        StringComparison.OrdinalIgnoreCase
+                                    )
+                                    ||
+                                    string.Equals(
+                                        e.ToLocationCode,
+                                        "NG_STACK",
+                                        StringComparison.OrdinalIgnoreCase
+                                    )
+                                )
+                            )
+                            .OrderByDescending(
+                                e => e.EventTime
+                            )
+                            .FirstOrDefault();
+                }
+
+
+                _latestQualityRoute =
+                    qualityRoute?.ToLocationCode;
+
+
+                RefreshQualityProcessUi();
+
+
+                // =========================================
+                // 최근 공정 이벤트 Grid
+                // =========================================
+
+                string signature =
+                    string.Join(
+                        "||",
+                        events.Select(e =>
+                            $"{e.EventTime}|{e.ProductCode}|{e.EventType}|{e.FromLocationCode}|{e.ToLocationCode}|{e.Remarks}")
+                    );
+
+
+                if (_lastProcessEventSignature != signature)
+                {
+                    _lastProcessEventSignature =
+                        signature;
+
+                    Dgv_RecentEvents.DataSource =
+                        null;
+
+                    Dgv_RecentEvents.DataSource =
+                        events;
+                }
             }
             catch (Exception ex)
             {
@@ -348,6 +691,285 @@ namespace Mes.Hmi.Forms
             }
         }
 
+        // =====================================================
+        // 양품 / 불량 최종 경로 카드 표시
+        // =====================================================
+        private void SetQualityRouteCard(
+            Panel panel,
+            bool isPass,
+            bool isActive)
+        {
+            Label[] labels = isPass
+                ? new[] { Lbl_PassTitle, Lbl_PassDestination }
+                : new[] { Lbl_FailTitle, Lbl_FailDestination };
+
+
+            // 카드 내부 Label이 2개라는 현재 UI 기준
+            if (labels.Length >= 2)
+            {
+                Label resultLabel = labels[0];
+                Label destinationLabel = labels[1];
+
+
+                if (isPass)
+                {
+                    resultLabel.Text =
+                        isActive
+                            ? "✓ 양품"
+                            : "양품";
+
+                    destinationLabel.Text =
+                        "양품 보관";
+
+
+                    resultLabel.ForeColor =
+                        Color.FromArgb(22, 163, 74);
+
+                    destinationLabel.ForeColor =
+                        isActive
+                            ? Color.FromArgb(21, 128, 61)
+                            : Color.FromArgb(71, 85, 105);
+                }
+                else
+                {
+                    resultLabel.Text =
+                        isActive
+                            ? "✕ 불량"
+                            : "불량";
+
+                    destinationLabel.Text =
+                        "불량품 적재";
+
+
+                    resultLabel.ForeColor =
+                        Color.FromArgb(220, 38, 38);
+
+                    destinationLabel.ForeColor =
+                        isActive
+                            ? Color.FromArgb(185, 28, 28)
+                            : Color.FromArgb(71, 85, 105);
+                }
+            }
+
+
+            // =========================================
+            // 카드 배경
+            // =========================================
+
+            if (!isActive)
+            {
+                panel.BackColor =
+                    Color.FromArgb(248, 250, 252);
+
+                return;
+            }
+
+
+            if (isPass)
+            {
+                // 활성 양품 경로
+                panel.BackColor =
+                    Color.FromArgb(187, 247, 208);
+            }
+            else
+            {
+                // 활성 불량 경로
+                panel.BackColor =
+                    Color.FromArgb(254, 202, 202);
+            }
+        }
+
+        // =====================================================
+        // QUALITY CHECK 공정 상태 표시
+        // =====================================================
+        private void RefreshQualityProcessUi()
+        {
+            string pressState =
+                _latestPressState?
+                    .Trim()
+                    .ToUpperInvariant()
+                ?? string.Empty;
+
+            string route =
+                _latestQualityRoute?
+                    .Trim()
+                    .ToUpperInvariant()
+                ?? string.Empty;
+
+            // PASS / FAIL 경로 기본 비활성 상태
+            SetQualityRouteCard(
+                Pnl_PassRoute,
+                true,
+                false
+            );
+
+            SetQualityRouteCard(
+                Pnl_FailRoute,
+                false,
+                false
+            );
+
+
+            // =========================================
+            // PRESS가 Idle이면
+            // 이전 제품의 판정 결과를 표시하지 않음
+            // =========================================
+
+            if (pressState == "IDLE")
+            {
+                Lbl_ProcessQualityState.Text =
+                    "대기";
+
+                Pnl_ProcessQuality.BackColor =
+                    Color.FromArgb(
+                        248,
+                        250,
+                        252
+                    );
+
+                Lbl_ProcessQualityState.ForeColor =
+                    Color.FromArgb(
+                        100,
+                        116,
+                        139
+                    );
+
+                return;
+            }
+
+
+            // =========================================
+            // 현재 PRESS 제품 PASS
+            // =========================================
+
+            if (route == "WAREHOUSE")
+            {
+                Lbl_ProcessQualityState.Text =
+                    "양품 → 보관";
+
+                SetProcessPass(
+                    Pnl_ProcessQuality,
+                    Lbl_ProcessQualityState
+                );
+
+
+                // 양품 경로 활성
+                SetQualityRouteCard(
+                    Pnl_PassRoute,
+                    true,
+                    true
+                );
+
+
+                // 불량 경로 비활성
+                SetQualityRouteCard(
+                    Pnl_FailRoute,
+                    false,
+                    false
+                );
+
+                return;
+            }
+
+
+            // =========================================
+            // 현재 PRESS 제품 FAIL
+            // =========================================
+
+            if (route == "NG_STACK")
+            {
+                Lbl_ProcessQualityState.Text =
+                    "불량 → 적재";
+
+                SetProcessFail(
+                    Pnl_ProcessQuality,
+                    Lbl_ProcessQualityState
+                );
+
+
+                // 양품 경로 비활성
+                SetQualityRouteCard(
+                    Pnl_PassRoute,
+                    true,
+                    false
+                );
+
+
+                // 불량 경로 활성
+                SetQualityRouteCard(
+                    Pnl_FailRoute,
+                    false,
+                    true
+                );
+
+                return;
+            }
+
+
+            // =========================================
+            // PRESS 작업 중이지만
+            // 아직 품질 판정 전
+            // =========================================
+
+            if (
+                pressState == "BUSY"
+                ||
+                pressState == "BLOCKED"
+            )
+            {
+                Lbl_ProcessQualityState.Text =
+                    "검사 대기";
+
+                Pnl_ProcessQuality.BackColor =
+                    Color.FromArgb(
+                        254,
+                        243,
+                        199
+                    );
+
+                Lbl_ProcessQualityState.ForeColor =
+                    Color.FromArgb(
+                        180,
+                        83,
+                        9
+                    );
+
+                return;
+            }
+
+
+            // =========================================
+            // 데이터 없음
+            // =========================================
+
+            Lbl_ProcessQualityState.Text =
+                "대기";
+
+            Pnl_ProcessQuality.BackColor =
+                Color.FromArgb(
+                    248,
+                    250,
+                    252
+                );
+
+            Lbl_ProcessQualityState.ForeColor =
+                Color.FromArgb(
+                    100,
+                    116,
+                    139
+                );
+        }
+
+
+        // =====================================================
+        // PLC 제어 버튼 활성화/비활성화
+        // =====================================================
+        private void SetPlcControlButtonsEnabled(bool enabled)
+        {
+            Btn_Start.Enabled = enabled;
+            Btn_Stop.Enabled = enabled;
+            Btn_Reset.Enabled = enabled;
+        }
 
         //=====================================================
         // START 버튼
@@ -356,15 +978,26 @@ namespace Mes.Hmi.Forms
             object sender,
             EventArgs e)
         {
+            // 중복 클릭 방지: 이미 명령 전송 중이면 무시
+            if (_plcCommandInProgress)
+                return;
+
             try
             {
-                Btn_Start.Enabled = false;
 
+                // PLC 제어 명령 전송 시작
+                _plcCommandInProgress = true;
+                SetPlcControlButtonsEnabled(false);
+
+                // PLC START 명령 전송
                 PlcControlResult? result =
                     await _mesServerClient.StartPlcAsync();
 
+                // 명령 전송 결과가 있으면 메시지 박스 표시
                 if (result != null)
                 {
+                    _plcSessionStarted = true;
+
                     MessageBox.Show(
                         $"{result.Command} 명령 전송 완료",
                         "PLC 제어",
@@ -384,7 +1017,9 @@ namespace Mes.Hmi.Forms
             }
             finally
             {
-                Btn_Start.Enabled = true;
+                // PLC 제어 명령 전송 완료
+                _plcCommandInProgress = false;
+                SetPlcControlButtonsEnabled(true);
             }
         }
 
@@ -396,9 +1031,13 @@ namespace Mes.Hmi.Forms
             object sender,
             EventArgs e)
         {
+            if (_plcCommandInProgress)
+                return;
+
             try
             {
-                Btn_Stop.Enabled = false;
+                _plcCommandInProgress = true;
+                SetPlcControlButtonsEnabled(false);
 
                 PlcControlResult? result =
                     await _mesServerClient.StopPlcAsync();
@@ -424,7 +1063,8 @@ namespace Mes.Hmi.Forms
             }
             finally
             {
-                Btn_Stop.Enabled = true;
+                _plcCommandInProgress = false;
+                SetPlcControlButtonsEnabled(true);
             }
         }
 
@@ -436,15 +1076,39 @@ namespace Mes.Hmi.Forms
             object sender,
             EventArgs e)
         {
+            if (_plcCommandInProgress)
+                return;
+
             try
             {
-                Btn_Reset.Enabled = false;
+                _plcCommandInProgress = true;
+                SetPlcControlButtonsEnabled(false);
 
                 PlcControlResult? result =
                     await _mesServerClient.ResetPlcAsync();
 
                 if (result != null)
                 {
+                    _plcSessionStarted = false;
+
+                    UpdateMachineProcessState(
+                        Pnl_ProcessVm1,
+                        Lbl_ProcessVm1State,
+                        "IDLE"
+                    );
+
+                    UpdateMachineProcessState(
+                        Pnl_ProcessPress,
+                        Lbl_ProcessPressState,
+                        "IDLE"
+                    );
+
+                    _latestPressState = "IDLE";
+                    _latestQualityRoute = null;
+                    _latestPressProductCode = null;
+
+                    RefreshQualityProcessUi();
+
                     MessageBox.Show(
                         $"{result.Command} 명령 전송 완료",
                         "PLC 제어",
@@ -464,49 +1128,146 @@ namespace Mes.Hmi.Forms
             }
             finally
             {
-                Btn_Reset.Enabled = true;
+                _plcCommandInProgress = false;
+                SetPlcControlButtonsEnabled(true);
             }
         }
 
-        //=====================================================
-        // 현재 제품 공정 흐름 표시
-        //=====================================================
-        private void UpdateProcessFlow(
-            CurrentProductInfo product)
+        // ==================================================
+        // 공정 Fail UI 표시
+        // ==================================================
+        private void SetProcessFail(
+            Panel panel,
+            Label label)
         {
-            // 기본값
-            Lbl_ProcessVm1State.Text = "---";
-            Lbl_ProcessPressState.Text = "---";
-            Lbl_ProcessQualityState.Text = "---";
+            panel.BackColor =
+                Color.FromArgb(
+                    254,
+                    226,
+                    226
+                );
 
-            string location =
-                product.CurrentLocationCode?
-                    .Trim()
-                    .ToUpperInvariant()
-                ?? string.Empty;
+            label.ForeColor =
+                Color.FromArgb(
+                    220,
+                    38,
+                    38
+                );
+        }
 
-            switch (location)
+        // =================================================
+        // 공정 PASS UI 표시
+        // =================================================
+        private void SetProcessPass(
+            Panel panel,
+            Label label)
+        {
+            panel.BackColor =
+                Color.FromArgb(
+                    220,
+                    252,
+                    231
+                );
+
+            label.ForeColor =
+                Color.FromArgb(
+                    22,
+                    163,
+                    74
+                );
+        }
+
+        // ====================================================
+        // 최근 생산 정보가 없으면 UI 초기화
+        // ===================================================
+        private void ResetProductionUi()
+        {
+            // 현재 작업지시
+            Lbl_WorkOrderCode.Text = "-";
+            Lbl_WorkOrderStatus.Text = "-";
+            Lbl_WorkOrderTarget.Text = "0 EA";
+            Lbl_WorkOrderAchievement.Text = "0.00 %";
+
+            // 생산 실적
+            Lbl_Target.Text = "0 EA";
+            Lbl_Produced.Text = "0 EA";
+            Lbl_Good.Text = "0 EA";
+            Lbl_Defect.Text = "0 EA";
+            Lbl_Yield.Text = "0.00 %";
+        }
+
+        //====================================================
+        // 최근 LOT 정보가 없으면 UI 초기화
+        //====================================================
+        private void ResetLotUi()
+        {
+            Lbl_LotCode.Text = "-";
+            Lbl_LotStatus.Text = "-";
+            Lbl_LotProduction.Text = "0 / 0 EA";
+            Lbl_LotProgress.Text = "0.00 %";
+
+            Pnl_LotProgressFill.Width = 0;
+        }
+
+        //====================================================
+        // 최근 VM1 설비 상태가 없으면 UI 초기화
+        //====================================================
+        private void ResetVm1Ui()
+        {
+            Lbl_Vm1State.Text = "---";
+            Lbl_Vm1Entered.Text = "0";
+            Lbl_Vm1Exited.Text = "0";
+            Lbl_Vm1Utilization.Text = "0.00 %";
+        }
+
+        //====================================================
+        // 최근 PRESS 설비 상태가 없으면 UI 초기화
+        //====================================================
+        private void ResetPressUi()
+        {
+            Lbl_PressState.Text = "---";
+            Lbl_PressEntered.Text = "0";
+            Lbl_PressExited.Text = "0";
+            Lbl_PressUtilization.Text = "0.00 %";
+        }
+
+        // ====================================================
+        // 전체 화면 전환 (F11) 및 ESC 키 처리
+        // ====================================================
+        private void MainForm_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.F11)
             {
-                case "VM1":
-                    Lbl_ProcessVm1State.Text = "진행 중";
-                    break;
+                // F11 키를 눌러 전체 화면 모드로 전환하도록 처리
+                if (!_isFullScreen)
+                {
+                    // 전체 화면 모드로 전환
+                    WindowState = FormWindowState.Normal;
+                    FormBorderStyle = FormBorderStyle.None;
+                    Bounds = Screen.FromControl(this).Bounds;
+                    TopMost = true;
 
-                case "PRESS":
-                    Lbl_ProcessVm1State.Text = "완료";
-                    Lbl_ProcessPressState.Text = "진행 중";
-                    break;
+                    _isFullScreen = true;
+                }
+                // F11 키를 다시 눌러 전체 화면 모드에서 벗어나도록 처리
+                else
+                {
+                    TopMost = false;
+                    FormBorderStyle = FormBorderStyle.Sizable;
+                    WindowState = FormWindowState.Maximized;
 
-                case "WAREHOUSE":
-                    Lbl_ProcessVm1State.Text = "완료";
-                    Lbl_ProcessPressState.Text = "완료";
-                    Lbl_ProcessQualityState.Text = "PASS";
-                    break;
+                    _isFullScreen = false;
+                }
+            }
 
-                case "NG_STACK":
-                    Lbl_ProcessVm1State.Text = "완료";
-                    Lbl_ProcessPressState.Text = "완료";
-                    Lbl_ProcessQualityState.Text = "FAIL";
-                    break;
+            // ESC 키를 눌러 전체 화면 모드에서 벗어나도록 처리
+            if (e.KeyCode == Keys.Escape && _isFullScreen)
+            {
+                TopMost = false;
+                FormBorderStyle = FormBorderStyle.Sizable;
+                WindowState = FormWindowState.Maximized;
+
+                _isFullScreen = false;
             }
         }
     }
