@@ -67,4 +67,9 @@ public class WorkOrderService
             workOrderCode
         );
     }
+
+    public async Task<WorkOrderIncompleteResult?> GetIncompleteAsync()
+    {
+        return await _repository.GetIncompleteAsync();
+    }
 }

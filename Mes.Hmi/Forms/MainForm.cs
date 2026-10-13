@@ -4,6 +4,7 @@ using Mes.Hmi.Models.Control;
 using Mes.Hmi.Models.Machine;
 using Mes.Hmi.Models.Process;
 using Mes.Hmi.Models.Production;
+using Mes.Hmi.Models.WorkOrder;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -973,52 +974,242 @@ namespace Mes.Hmi.Forms
 
         //=====================================================
         // START 버튼
+        //
+        // 1. 미완료 작업지시 확인
+        // 2. 없으면 새 작업지시 생성
+        // 3. IDLE → START
+        // 4. PAUSE → RESUME
+        // 5. RUNNING → 그대로 계속
+        // 6. 생산 준비 완료 후 PLC START
         //=====================================================
         private async void Btn_Start_Click(
             object sender,
             EventArgs e)
         {
-            // 중복 클릭 방지: 이미 명령 전송 중이면 무시
             if (_plcCommandInProgress)
                 return;
 
             try
             {
-
-                // PLC 제어 명령 전송 시작
                 _plcCommandInProgress = true;
+
                 SetPlcControlButtonsEnabled(false);
 
-                // PLC START 명령 전송
-                PlcControlResult? result =
-                    await _mesServerClient.StartPlcAsync();
 
-                // 명령 전송 결과가 있으면 메시지 박스 표시
+                // ==========================================
+                // 1. 현재 미완료 작업지시 조회
+                // ==========================================
+                if (!_plcSessionStarted)
+                {
+                    WorkOrderIncompleteInfo? workOrder =
+                    await _mesServerClient
+                        .GetIncompleteWorkOrderAsync();
+
+
+                    // ==========================================
+                    // 2. 미완료 작업지시 없음
+                    // ==========================================
+
+                    if (workOrder == null)
+                    {
+                        DialogResult createResult =
+                            MessageBox.Show(
+                                "현재 진행할 작업지시가 없습니다.\n\n" +
+                                "새 작업지시를 생성하시겠습니까?\n\n" +
+                                "목표수량 : 300 EA\n" +
+                                "LOT      : 5개\n" +
+                                "LOT당    : 60 EA",
+                                "작업지시 생성",
+                                MessageBoxButtons.YesNo,
+                                MessageBoxIcon.Question
+                            );
+
+
+                        if (createResult != DialogResult.Yes)
+                            return;
+
+
+                        // --------------------------------------
+                        // 다음 WorkOrder Code 생성
+                        // --------------------------------------
+
+                        string newWorkOrderCode =
+                            await _mesServerClient
+                                .GetNextWorkOrderCodeAsync();
+
+
+                        // --------------------------------------
+                        // 새 WorkOrder 생성
+                        //
+                        // createdByUserId는
+                        // 실제 테스트에 사용한 UserId로 설정
+                        // --------------------------------------
+
+                        const long createdByUserId = 1;
+
+                        await _mesServerClient
+                            .CreateWorkOrderAsync(
+                                newWorkOrderCode,
+                                createdByUserId
+                            );
+
+
+                        // --------------------------------------
+                        // 생성한 WorkOrder START
+                        // --------------------------------------
+
+                        await _mesServerClient
+                            .StartWorkOrderAsync(
+                                newWorkOrderCode
+                            );
+
+
+                        MessageBox.Show(
+                            $"작업지시가 생성되었습니다.\n\n" +
+                            $"작업지시 : {newWorkOrderCode}\n" +
+                            $"목표수량 : 300 EA\n" +
+                            $"LOT      : 5개",
+                            "작업지시 생성 완료",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information
+                        );
+                    }
+
+                    // ==========================================
+                    // 3. 기존 미완료 작업지시 존재
+                    // ==========================================
+
+                    else
+                    {
+                        DialogResult continueResult =
+                            MessageBox.Show(
+                                "완료되지 않은 작업지시가 있습니다.\n\n" +
+                                $"작업지시 : {workOrder.WorkOrderCode}\n" +
+                                $"상태     : {workOrder.Status}\n" +
+                                $"목표수량 : {workOrder.TargetQty} EA\n\n" +
+                                "이 작업지시를 계속 진행하시겠습니까?",
+                                "미완료 작업지시",
+                                MessageBoxButtons.YesNo,
+                                MessageBoxIcon.Question
+                            );
+
+
+                        if (continueResult != DialogResult.Yes)
+                            return;
+
+
+                        string status =
+                            workOrder.Status
+                                .Trim()
+                                .ToUpperInvariant();
+
+
+                        // --------------------------------------
+                        // 아직 시작하지 않은 작업지시
+                        // --------------------------------------
+
+                        if (status == "IDLE")
+                        {
+                            await _mesServerClient
+                                .StartWorkOrderAsync(
+                                    workOrder.WorkOrderCode
+                                );
+                        }
+
+                        // --------------------------------------
+                        // 일시정지 작업지시
+                        // --------------------------------------
+
+                        else if (status == "PAUSE")
+                        {
+                            await _mesServerClient
+                                .ResumeWorkOrderAsync(
+                                    workOrder.WorkOrderCode
+                                );
+                        }
+
+                        // --------------------------------------
+                        // RUNNING
+                        //
+                        // DB 상태는 그대로 두고
+                        // PLC만 다시 START
+                        // --------------------------------------
+
+                        else if (status == "RUNNING")
+                        {
+                            // 별도 WorkOrder 상태 변경 없음
+                        }
+
+                        else
+                        {
+                            throw new InvalidOperationException(
+                                $"처리할 수 없는 작업지시 상태입니다: {status}"
+                            );
+                        }
+                    }
+                }
+
+                // ==========================================
+                // 4. 작업지시 준비 완료 후 PLC START
+                // ==========================================
+
+                // 생산 컨텍스트 최종 확인
+
+                ProductionInfo? production =
+                    await _mesServerClient
+                        .GetCurrentProductionAsync();
+
+                if (production?.WorkOrder == null)
+                {
+                    throw new InvalidOperationException(
+                        "실행 중인 작업지시를 확인할 수 없습니다."
+                    );
+                }
+
+                if (production.CurrentLot == null)
+                {
+                    throw new InvalidOperationException(
+                        "RUNNING LOT을 확인할 수 없습니다."
+                    );
+                }
+
+                PlcControlResult? result =
+                    await _mesServerClient
+                        .StartPlcAsync();
+
+
                 if (result != null)
                 {
                     _plcSessionStarted = true;
 
+
+                    // 화면 즉시 갱신
+                    await LoadProductionAsync();
+
+
                     MessageBox.Show(
                         $"{result.Command} 명령 전송 완료",
-                        "PLC 제어",
+                        "생산 시작",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information
                     );
                 }
             }
+
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"START 명령 전송 실패\n\n{ex.Message}",
-                    "PLC 제어 오류",
+                    $"생산 시작 실패\n\n{ex.Message}",
+                    "생산 시작 오류",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error
                 );
             }
+
             finally
             {
-                // PLC 제어 명령 전송 완료
                 _plcCommandInProgress = false;
+
                 SetPlcControlButtonsEnabled(true);
             }
         }

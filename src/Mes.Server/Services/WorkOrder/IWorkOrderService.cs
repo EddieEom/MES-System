@@ -15,4 +15,6 @@ public interface IWorkOrderService
     Task<WorkOrderStateResult> ResumeAsync(
         string workOrderCode
     );
+
+    Task<WorkOrderIncompleteResult?> GetIncompleteAsync();
 }

@@ -23,4 +23,7 @@ public interface IWorkOrderRepository
     Task<WorkOrderStateResult> ResumeAsync(
         string workOrderCode
     );
+
+    // 미완료 작업지시 조회
+    Task<WorkOrderIncompleteResult?> GetIncompleteAsync();
 }

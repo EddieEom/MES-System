@@ -966,4 +966,85 @@ public class WorkOrderRepository
                 reader.GetString(6)
         };
     }
+
+    public async Task<WorkOrderIncompleteResult?> GetIncompleteAsync()
+    {
+        const string sql = """
+        SELECT TOP 1
+            work_order_id,
+            work_order_code,
+            target_qty,
+            lot_count,
+            lot_size,
+            status,
+            created_by_user_id,
+            created_at,
+            started_at,
+            completed_at
+        FROM work_orders
+        WHERE status <> 'COMPLETED'
+        ORDER BY
+            CASE status
+                WHEN 'RUNNING' THEN 1
+                WHEN 'PAUSE' THEN 2
+                WHEN 'IDLE' THEN 3
+                ELSE 4
+            END,
+            created_at ASC;
+        """;
+
+        await using var connection =
+            _connectionFactory.CreateConnection();
+
+        await connection.OpenAsync();
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.CommandText = sql;
+
+        await using var reader =
+            await command.ExecuteReaderAsync();
+
+        if (!await reader.ReadAsync())
+            return null;
+
+        return new WorkOrderIncompleteResult
+        {
+            WorkOrderId =
+        reader.GetInt64(
+            reader.GetOrdinal("work_order_id")),
+
+            WorkOrderCode =
+        reader.GetString(
+            reader.GetOrdinal("work_order_code")),
+
+            TargetQty =
+        reader.GetInt32(
+            reader.GetOrdinal("target_qty")),
+
+            LotCount =
+        reader.GetInt16(
+            reader.GetOrdinal("lot_count")),
+
+            LotSize =
+        reader.GetInt16(
+            reader.GetOrdinal("lot_size")),
+
+            Status =
+        reader.GetString(
+            reader.GetOrdinal("status")),
+
+            CreatedAt =
+        reader.GetDateTime(
+            reader.GetOrdinal("created_at")),
+
+            StartedAt =
+        reader.IsDBNull(
+            reader.GetOrdinal("started_at"))
+            ? null
+            : reader.GetDateTime(
+                reader.GetOrdinal("started_at"))
+        };
+    }
 }

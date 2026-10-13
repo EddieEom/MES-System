@@ -274,4 +274,23 @@ public class WorkOrderController
 
         return Ok(workOrder);
     }
+
+    //=====================================================
+    // 미완료 작업지시 조회
+    //
+    // GET /api/work-orders/incomplete
+    //====================================================
+    [HttpGet("incomplete")]
+    public async Task<IActionResult> GetIncomplete()
+    {
+        var result =
+            await _service.GetIncompleteAsync();
+
+        if (result == null)
+        {
+            return NoContent();
+        }
+
+        return Ok(result);
+    }
 }
