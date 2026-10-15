@@ -40,25 +40,17 @@
 
 ## 🔗 시스템 구성
 
-```mermaid
-flowchart TD
-    HMI["작업자 화면 / WinForms HMI"]
-    SERVER["MES 서버 / ASP.NET Core"]
-    GATEWAY["통신 프로그램 / Mes.Gateway"]
-    PLC["PLC 시뮬레이터 / GX Simulator2"]
-    GEMINI["가상 생산 설비 / MELSOFT Gemini"]
-    BROKER["MQTT 메시지 전달 / Mosquitto"]
-    DB["데이터 저장 / AWS RDS SQL Server"]
+![MES 시스템 구성도](./docs/images/system-architecture.svg)
 
-    HMI -->|"HTTP: 현황 조회, 제어 요청"| SERVER
-    SERVER -->|"SignalR: 제어 명령"| GATEWAY
-    GATEWAY <-->|"MX Component: 신호 읽기·쓰기"| PLC
-    PLC <-->|"Mitsubishi FA: 설비 신호 연결"| GEMINI
-    GEMINI -->|"MQTT: 상태, 이동, 검사 결과"| BROKER
-    BROKER -->|"MQTT 메시지 수신"| GATEWAY
-    GATEWAY -->|"HTTP: 수집 데이터 전송"| SERVER
-    SERVER <-->|"조회 및 저장"| DB
-```
+| 구성 요소 | 사용 기술 |
+| :--- | :--- |
+| 작업자 화면 | WinForms HMI |
+| MES 서버 | ASP.NET Core Web API |
+| 통신 프로그램 | Mes.Gateway · SignalR · MQTTnet |
+| PLC 연동 | GX Simulator2 · MX Component |
+| 가상 생산 설비 | MELSOFT Gemini |
+| 메시지 전달 | MQTT · Mosquitto |
+| 데이터 저장 | AWS RDS for SQL Server |
 
 ### 생산 데이터
 
