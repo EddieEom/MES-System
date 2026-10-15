@@ -22,13 +22,11 @@
 <table><tr><th width="50%">가상 생산 설비</th><th width="50%">알람 표시</th></tr><tr><td><img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-digital-twin.jpg" alt="MELSOFT Gemini 가상 생산 설비" width="100%"/></td><td><img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-alarm.jpg" alt="HMI 활성 알람 표시" width="100%"/></td></tr></table>
 
 <details>
-<summary><b>제품 이력 조회와 통신 구성도 보기</b></summary>
+<summary><b>제품 이력 조회 보기</b></summary>
 
 <img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-trace.jpg" alt="동일 제품 코드의 이동 이력과 PASS 검사 결과 DB 조회" width="100%"/>
 
 **제품 추적** · 동일 제품 코드의 이동 기록과 PASS 검사 결과를 DB에서 조회한 화면입니다.
-
-<img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-architecture.jpg" alt="디지털 트윈·PLC·MES 양방향 통신 구성도" width="100%"/>
 
 </details>
 
