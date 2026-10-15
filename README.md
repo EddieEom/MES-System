@@ -13,6 +13,25 @@
 | :--- | :--- | :--- |
 | **개인 프로젝트** | **통신 · 서버 · DB · HMI** | GX Simulator2 · MELSOFT Gemini |
 
+## 실행 화면
+
+<img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-hmi.jpg" alt="작업지시·LOT·생산수량·설비 상태를 표시하는 WinForms HMI" width="100%"/>
+
+**WinForms HMI** · 작업지시, 생산 실적, 공정 흐름과 제어 버튼을 한 화면에 구성했습니다.
+
+<table><tr><th width="50%">가상 생산 설비</th><th width="50%">알람 표시</th></tr><tr><td><img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-digital-twin.jpg" alt="MELSOFT Gemini 가상 생산 설비" width="100%"/></td><td><img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-alarm.jpg" alt="HMI 활성 알람 표시" width="100%"/></td></tr></table>
+
+<details>
+<summary><b>제품 이력 조회와 통신 구성도 보기</b></summary>
+
+<img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-trace.jpg" alt="동일 제품 코드의 이동 이력과 PASS 검사 결과 DB 조회" width="100%"/>
+
+**제품 추적** · 동일 제품 코드의 이동 기록과 PASS 검사 결과를 DB에서 조회한 화면입니다.
+
+<img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-architecture.jpg" alt="디지털 트윈·PLC·MES 양방향 통신 구성도" width="100%"/>
+
+</details>
+
 ## 🏭 구현 요약
 
 <table>
