@@ -1,30 +1,27 @@
-# MES SYSTEM
+<div align="center">
 
-**가상 설비·PLC 시뮬레이터·서버·DB·HMI를 연결한 개인 MES 프로젝트**입니다.
+# MES-System
 
-가상 설비에서 제품이 이동하고 검사되는 과정을 데이터베이스에 저장하고, HMI 화면에서 생산 현황을 확인할 수 있도록 만들었습니다.
+**가상 설비의 제어부터 생산 데이터 수집·HMI 모니터링까지**
 
-현재는 VM1과 PRESS 공정을 대상으로 설비 상태, 제품 이동 이력, 양품·불량 결과, 알람을 관리합니다. PLC 연동은 GX Simulator2를 기준으로 개발하고 테스트했습니다.
+</div>
 
-## 개발 범위
+<p align="center"><img alt="C#" src="https://img.shields.io/badge/C%23-512BD4?style=flat-square"/> <img alt="ASP.NET Core" src="https://img.shields.io/badge/ASP.NET%20Core-512BD4?style=flat-square"/> <img alt="WinForms" src="https://img.shields.io/badge/WinForms-512BD4?style=flat-square"/> <img alt="MQTT" src="https://img.shields.io/badge/MQTT-660066?style=flat-square"/> <img alt="SQL Server" src="https://img.shields.io/badge/SQL%20Server-CC2927?style=flat-square"/></p>
 
-혼자 진행하며 GX Works2, MX Component, MELSOFT Gemini, MQTT, ASP.NET Core와 WinForms를 연결했습니다. 서버와 HMI 화면을 만들고, HMI 제어 명령과 가상 설비 데이터가 양방향으로 오가는 동작을 확인했습니다.
 
-개발 및 동작 확인은 GX Simulator2와 MELSOFT Gemini의 가상 생산 공정을 기준으로 진행했습니다.
+| 개발 형태 | 담당 범위 | 확인 환경 |
+| :--- | :--- | :--- |
+| **개인 프로젝트** | **통신 · 서버 · DB · HMI** | GX Simulator2 · MELSOFT Gemini |
 
-## 1. 프로젝트를 만든 이유
+## 🏭 구현 요약
 
-제조 현장에서 발생한 데이터가 어떤 과정을 거쳐 생산 관리 화면에 표시되는지 직접 구현해 보고 싶어서 시작했습니다.
+<table>
+<tr><td width="33%" valign="top"><b>설비 제어</b><br><br>HMI 제어 명령<br>START · STOP · RESET<br>MX Component로 PLC 신호 전달</td>
+<td width="33%" valign="top"><b>생산 데이터 수집</b><br><br>MQTT 메시지 수신<br>제품 이동 · PASS / FAIL<br>서버와 DB에 이력 저장</td>
+<td width="33%" valign="top"><b>HMI 모니터링</b><br><br>작업지시 · LOT 진행률<br>생산수량 · 수율 · 설비 상태<br>알람 발생·해제 표시</td></tr>
+</table>
 
-다음 흐름을 연결하는 데 집중했습니다.
-
-- HMI에서 START·STOP·RESET 명령 보내기
-- PLC 신호를 가상 설비와 연결하기
-- 설비 상태와 제품 이동 데이터 수집하기
-- 제품별 검사 결과와 공정 이력 저장하기
-- 생산수량, 수율, 알람을 화면에서 확인하기
-
-## 2. 시스템 구성
+## 🔗 시스템 구성
 
 ```mermaid
 flowchart TD
@@ -55,6 +52,41 @@ Gemini에서 설비 상태, 제품 이동, 검사 결과가 발생하면 MQTT로
 HMI에서 버튼을 누르면 서버에 제어 요청을 보냅니다. 서버는 SignalR로 Gateway에 명령을 전달하고, Gateway는 MX Component를 통해 PLC 신호를 변경합니다. Gemini는 연결된 PLC 신호를 사용해 공정을 제어합니다.
 
 HMI의 현황 조회에는 HTTP를 사용하고, 서버에서 Gateway로 제어 명령을 보낼 때는 SignalR를 사용합니다.
+
+
+## ✅ 동작 확인
+
+아래 항목은 개발 환경에서 직접 동작을 확인했습니다.
+
+| 항목 | 확인 내용 |
+|---|---|
+| HMI 현황 표시 | 작업지시, LOT, 생산 실적, 설비 상태, 최근 이벤트 표시 |
+| PLC 제어 | HMI에서 START·STOP·RESET 명령 전달 |
+| 불량 처리와 이력 | 같은 제품 코드로 이동 → FAIL 판정 → 불량 적재 → DB 이력 조회 |
+| 알람 발생과 해제 | 알람 발생 → HMI 활성 알람 표시 → 알람 해제 확인 |
+
+불량 경로의 화면 표시뿐 아니라, 같은 제품의 검사 결과와 이동 기록이 DB에 남는 것까지 확인했습니다. 알람도 발생부터 화면 표시, 해제까지 연결해서 확인했습니다.
+
+
+## 🔧 문제 해결
+
+### MQTT 전송 지연
+
+처음에는 메시지를 보낼 때마다 `mosquitto_pub.exe`를 새로 실행했습니다. 이 과정에서 Gemini 처리가 지연되었고, PLC 통신 지연 오류가 함께 발생했습니다.
+
+이후 메시지 전송 프로그램을 계속 실행해 둔 상태에서 데이터를 전달하는 방식으로 변경했습니다.
+
+자세한 내용은 아래 기록에 정리했습니다.
+
+[Gemini MQTT 통신 최적화 및 트러블슈팅](./MES_Gemini_MQTT_통신최적화_트러블슈팅_2026-10-06.md)
+
+### HMI 배치와 디자인
+
+설비 카드와 공정 라벨이 겹치거나 정렬이 맞지 않는 부분을 수정했습니다. 표 기반 배치와 공통 테마를 적용해 생산 현황, 설비 상태, 공정 흐름을 구분하기 쉽게 정리했습니다.
+
+
+<details>
+<summary><b>📋 주요 기능 · 기술 · DB · API 상세</b></summary>
 
 ## 3. 사용 기술
 
@@ -186,18 +218,10 @@ AWS RDS의 SQL Server를 사용하며, 데이터베이스 이름은 `MES_SYSTEM`
 
 PLC 제어 API의 `sent` 응답은 서버가 명령을 전송했다는 의미입니다. 실제 PLC 처리 결과는 Gateway 로그와 PLC 동작을 함께 확인합니다.
 
-## 9. 확인한 동작
+</details>
 
-아래 항목은 개발 환경에서 직접 동작을 확인했습니다.
-
-| 항목 | 확인 내용 |
-|---|---|
-| HMI 현황 표시 | 작업지시, LOT, 생산 실적, 설비 상태, 최근 이벤트 표시 |
-| PLC 제어 | HMI에서 START·STOP·RESET 명령 전달 |
-| 불량 처리와 이력 | 같은 제품 코드로 이동 → FAIL 판정 → 불량 적재 → DB 이력 조회 |
-| 알람 발생과 해제 | 알람 발생 → HMI 활성 알람 표시 → 알람 해제 확인 |
-
-불량 경로의 화면 표시뿐 아니라, 같은 제품의 검사 결과와 이동 기록이 DB에 남는 것까지 확인했습니다. 알람도 발생부터 화면 표시, 해제까지 연결해서 확인했습니다.
+<details>
+<summary><b>⚙️ 실행 환경과 순서</b></summary>
 
 ## 10. 실행 환경과 순서
 
@@ -237,21 +261,24 @@ Gateway의 서버 주소는 `MES_SERVER_BASE_URL` 환경변수로 변경할 수 
 
 Gateway는 시작할 때 서버와 PLC 연결을 확인하며, 연결에 실패하면 종료합니다.
 
-## 11. 개발하면서 해결한 문제
+</details>
 
-### MQTT 전송 지연
+<details>
+<summary><b>📝 프로젝트 배경과 보완 과제</b></summary>
 
-처음에는 메시지를 보낼 때마다 `mosquitto_pub.exe`를 새로 실행했습니다. 이 과정에서 Gemini 처리가 지연되었고, PLC 통신 지연 오류가 함께 발생했습니다.
+## 1. 프로젝트를 만든 이유
 
-이후 메시지 전송 프로그램을 계속 실행해 둔 상태에서 데이터를 전달하는 방식으로 변경했습니다.
+제조 현장에서 발생한 데이터가 어떤 과정을 거쳐 생산 관리 화면에 표시되는지 직접 구현해 보고 싶어서 시작했습니다.
 
-자세한 내용은 아래 기록에 정리했습니다.
+다음 흐름을 연결하는 데 집중했습니다.
 
-[Gemini MQTT 통신 최적화 및 트러블슈팅](./MES_Gemini_MQTT_통신최적화_트러블슈팅_2026-10-06.md)
+- HMI에서 START·STOP·RESET 명령 보내기
+- PLC 신호를 가상 설비와 연결하기
+- 설비 상태와 제품 이동 데이터 수집하기
+- 제품별 검사 결과와 공정 이력 저장하기
+- 생산수량, 수율, 알람을 화면에서 확인하기
 
-### HMI 배치와 디자인
 
-설비 카드와 공정 라벨이 겹치거나 정렬이 맞지 않는 부분을 수정했습니다. 표 기반 배치와 공통 테마를 적용해 생산 현황, 설비 상태, 공정 흐름을 구분하기 쉽게 정리했습니다.
 
 ## 12. 프로젝트 정리 및 보완 계획
 
@@ -260,3 +287,6 @@ Gateway는 시작할 때 서버와 PLC 연결을 확인하며, 연결에 실패�
 - 통신이 끊겼을 때의 복구 동작 보완
 
 현재 프로젝트는 디지털 트윈, PLC 시뮬레이터, Gateway, 서버, DB, HMI를 연결하는 범위로 구성했습니다.
+
+</details>
+
