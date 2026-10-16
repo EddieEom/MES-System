@@ -6,12 +6,6 @@
 가상 생산설비 모델 제공: **㈜퍼씨엠** (설비 모델은 외부 제공, Gateway·Server·DB·HMI 연동은 개발 범위)  
 대상 구간: MELSOFT Gemini ↔ MQTT/Mosquitto ↔ Mes.Gateway ↔ Mes.Server ↔ SQL Server / HMI ↔ PLC 시뮬레이터
 
-> **문서 읽는 법**: 3~17장은 2026-10-06 당시 문제 재현 및 수정 **과정의 기록**으로 보존했습니다. 그때의 오류·시도·시험 코드가 현재 모두 적용돼 있거나 끝까지 검증됐다는 뜻은 아닙니다. 1~2장 및 18~22장은 **2026-10-16 현재 공개된 GitHub 코드/README와 대조해 갱신**했습니다. MELSOFT Gemini 내부 Python 스크립트, PLC 래더, MX Component 설치 버전은 저장소만으로 완전 검증할 수 없습니다.
-
-**현 단계 구분**
-- **소스코드로 확인**: HMI의 1초 대기 기반 HTTP 조회, Gateway의 D110/D111 1초 대기 기반 폴링, HMI→Server→SignalR→Gateway→MX Component 제어, MQTT `dt/#` 수신, 작업지시/LOT/제품 생성 흐름.
-- **기존 시연·테스트로 확인했다고 기록된 범위**: 제어 버튼, 개별 제품 PASS/FAIL 이동 이력, 설비 알람 발생·해제 및 HMI 반영.
-- **미완료 또는 근거 부족**: Feeder 중단·재개 장시간 안정성, 60EA LOT 전환과 300EA 연속 생산 완료, `mosquitto_pub.exe` 종료 후 프로세스 0건 여부의 최신 재측정.
 
 ---
 
