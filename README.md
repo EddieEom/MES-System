@@ -13,6 +13,23 @@
 | :--- | :--- | :--- |
 | **개인 프로젝트** | **통신 · 서버 · DB · HMI** | GX Simulator2 · MELSOFT Gemini |
 
+## 실행 화면
+
+<img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-hmi.jpg" alt="작업지시·LOT·생산수량·설비 상태를 표시하는 WinForms HMI" width="100%"/>
+
+**WinForms HMI** · 작업지시, 생산 실적, 공정 흐름과 제어 버튼을 한 화면에 구성했습니다.
+
+<table><tr><th width="50%">가상 생산 설비</th><th width="50%">알람 표시</th></tr><tr><td><img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-digital-twin.jpg" alt="MELSOFT Gemini 가상 생산 설비" width="100%"/></td><td><img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-alarm.jpg" alt="HMI 활성 알람 표시" width="100%"/></td></tr></table>
+
+<details>
+<summary><b>제품 이력 조회 보기</b></summary>
+
+<img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-trace.jpg" alt="동일 제품 코드의 이동 이력과 PASS 검사 결과 DB 조회" width="100%"/>
+
+**제품 추적** · 동일 제품 코드의 이동 기록과 PASS 검사 결과를 DB에서 조회한 화면입니다.
+
+</details>
+
 ## 🏭 구현 요약
 
 <table>
@@ -23,25 +40,17 @@
 
 ## 🔗 시스템 구성
 
-```mermaid
-flowchart TD
-    HMI["작업자 화면 / WinForms HMI"]
-    SERVER["MES 서버 / ASP.NET Core"]
-    GATEWAY["통신 프로그램 / Mes.Gateway"]
-    PLC["PLC 시뮬레이터 / GX Simulator2"]
-    GEMINI["가상 생산 설비 / MELSOFT Gemini"]
-    BROKER["MQTT 메시지 전달 / Mosquitto"]
-    DB["데이터 저장 / AWS RDS SQL Server"]
+![MES 시스템 구성도](./docs/images/system-architecture.svg)
 
-    HMI -->|"HTTP: 현황 조회, 제어 요청"| SERVER
-    SERVER -->|"SignalR: 제어 명령"| GATEWAY
-    GATEWAY <-->|"MX Component: 신호 읽기·쓰기"| PLC
-    PLC <-->|"Mitsubishi FA: 설비 신호 연결"| GEMINI
-    GEMINI -->|"MQTT: 상태, 이동, 검사 결과"| BROKER
-    BROKER -->|"MQTT 메시지 수신"| GATEWAY
-    GATEWAY -->|"HTTP: 수집 데이터 전송"| SERVER
-    SERVER <-->|"조회 및 저장"| DB
-```
+| 구성 요소 | 사용 기술 |
+| :--- | :--- |
+| 작업자 화면 | WinForms HMI |
+| MES 서버 | ASP.NET Core Web API |
+| 통신 프로그램 | Mes.Gateway · SignalR · MQTTnet |
+| PLC 연동 | GX Simulator2 · MX Component |
+| 가상 생산 설비 | MELSOFT Gemini |
+| 메시지 전달 | MQTT · Mosquitto |
+| 데이터 저장 | AWS RDS for SQL Server |
 
 ### 생산 데이터
 

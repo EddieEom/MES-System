@@ -1,79 +1,71 @@
 # MES / Gemini MQTT 통신 최적화 및 트러블슈팅 기록
 
-작성일: 2026-10-06  
-대상 프로젝트: 디지털 트윈 연동 Press 공정 MES 시스템  
-대상 구간: MELSOFT Gemini ↔ MQTT ↔ Mes.Gateway / Mitsubishi FA ↔ GX Simulator2
+최초 작성일: 2026-10-06  
+구현 현황 재검토: 2026-10-16  
+대상 프로젝트: 디지털 트윈 연동 PLC 설비 제어·MES 생산관리 시스템  
+가상 생산설비 모델 제공: **㈜퍼씨엠** (설비 모델은 외부 제공, Gateway·Server·DB·HMI 연동은 개발 범위)  
+대상 구간: MELSOFT Gemini ↔ MQTT/Mosquitto ↔ Mes.Gateway ↔ Mes.Server ↔ SQL Server / HMI ↔ PLC 시뮬레이터
+
 
 ---
 
 ## 1. 현재 프로젝트 통신 구조
 
 ```text
-[Gemini Digital Twin]
-    │
-    ├─ Mitsubishi Electric FA
-    │       ↕
-    │   GX Simulator2
-    │       ↕
-    │   MX Component V5
-    │       ↕
-    │   Mes.Gateway
-    │
-    └─ MQTT
-            ↓
-        Mosquitto Broker
-            ↓
-        Mes.Gateway
-            ↓
-        Mes.Server
-            ↓
-        MSSQL MES_SYSTEM
+[작업자 WinForms HMI]
+        │
+        ├─ HTTP API 제어 요청(POST /api/plc-control/start|stop|reset)
+        │       ↓
+        │   ASP.NET Core Mes.Server
+        │       ↓ SignalR (PlcCommand)
+        │   C# Mes.Gateway
+        │       ↓ MX Component (COM, Logical Station 1)
+        │   GX Simulator2 / PLC
+        │       ↓ PLC 장치 상태/접점
+        │   MELSOFT Gemini 가상 설비
+        │
+        └─ HTTP API 현황 조회 ← Mes.Server ← SQL Server
+
+[MELSOFT Gemini 가상 설비]
+        │ 설비 상태·제품 이동·품질 결과 MQTT 송신
+        ↓
+  Mosquitto Broker
+        ↓
+  Mes.Gateway (MQTTnet, dt/# 구독)
+        ↓ HTTP API
+  Mes.Server
+        ↓
+  SQL Server (MES_SYSTEM)
+        ↓ HTTP 조회
+  WinForms HMI
 ```
 
-PLC 제어 흐름은 별도로 다음 구조를 유지한다.
-
-```text
-HMI
- ↓ HTTP
-Mes.Server
- ↓ SignalR
-Mes.Gateway
- ↓ MX Component
-GX Simulator2 / PLC
- ↓
-M3 = RUN_STATE
- ↓
-Gemini Signal Relay
-```
+- `Mes.Gateway`가 PLC·MQTT 연결을 담당하며 SQL Server에 직접 접근하지 않습니다. DB 읽기/쓰기는 `Mes.Server`를 통해 처리합니다.
+- PLC 제어 장치는 **M0 START, M1 STOP, M2 RESET**이고 Gateway에서 **300ms 펄스**로 명령을 전달합니다. **D110 운전 상태, D111 알람 코드**를 읽습니다. `M3=RUN_STATE`는 가상 설비 동작 연결을 설명하기 위한 PLC/Gemini 측 신호로서, 관련 래더·Gemini 설정은 이 GitHub 저장소만으로 확인되지 않습니다.
+- 제어 API가 반환하는 `status: sent`는 **SignalR 명령 전송** 결과입니다. PLC 실행 완료에 대한 종단 간 확인 응답(ACK)으로 해석하면 안 됩니다. 실제 PLC 제어는 Gateway 로그, PLC 상태 및 시뮬레이터 동작을 함께 확인해야 합니다.
+- **MX Component 버전 주의**: 저장소의 README/구 문서는 V5를 표기하지만, 이후 실제 사용 환경은 **V4**로 변경했다고 확인되었습니다. C#의 `ActUtlType64Lib` 참조만으로 설치된 제품 버전까지 확정할 수는 없습니다. 현재 버전을 명시하는 문서·사진은 실제 PC 설치 환경에서 재확인하세요.
+- **DB 위치 주의**: 초기에 AWS RDS for SQL Server를 구축했고 이후 개발 DB를 **로컬 SQL Server**로 전환했습니다. README의 RDS 표기는 초기 환경을 반영하는 부분이 남아 있습니다.
 
 ---
 
-# 2. Polling 구분
+## 2. Polling 구분 — 2026-10-16 코드 확인
 
-프로젝트에서 Polling은 두 종류이며 서로 다른 기능이다.
+Polling은 서로 다른 두 경로에서 구현돼 있습니다.
 
-| 구간 | 상태 | 역할 |
+| 구간 | 구현 확인 | 코드 근거 및 동작 |
 |---|---|---|
-| Gateway → PLC | 구현 완료 | D110 / D111 1초 Polling |
-| HMI → Mes.Server | 미구현 | Dashboard 화면 자동 갱신 |
+| **Gateway → PLC 시뮬레이터** | **구현** | `src/Mes.Gateway/Services/PlcPollingService.cs`: D110/D111 읽기 후 `Task.Delay(1000)` |
+| **WinForms HMI → Mes.Server** | **구현** | `Mes.Hmi/Forms/MainForm.cs`: 생산·현재 제품·알람·설비 상태·최근 이벤트 API를 병렬 조회한 후 `Task.Delay(1000)` |
 
-Gateway의 `PlcPollingService`는 이미 구현되어 있다.
+**정확한 주기 표현:** 두 작업 모두 **조회/처리가 끝난 다음 1초를 대기하는 반복 루프**입니다. 따라서 네트워크/API 응답 시간까지 포함한 화면 갱신 간격이 항상 정확히 1,000ms인 것은 아닙니다.
+
+### Gateway PLC Polling 핵심
 
 ```csharp
-public async Task RunAsync(
-    CancellationToken cancellationToken = default)
+while (!cancellationToken.IsCancellationRequested)
 {
-    while (!cancellationToken.IsCancellationRequested)
-    {
-        await ReadAndProcessAsync(
-            cancellationToken
-        );
-
-        await Task.Delay(
-            1000,
-            cancellationToken
-        );
-    }
+    await ReadAndProcessAsync(cancellationToken);
+    await Task.Delay(1000, cancellationToken);
 }
 ```
 
@@ -81,136 +73,31 @@ public async Task RunAsync(
 
 ```text
 D110 = PLC 운전 상태
-D111 = PLC Alarm Code
+D111 = PLC Alarm Code (0: 정상, 0 초과: 알람)
 ```
 
-따라서 PLC Polling은 다시 구현하지 않는다.
+현재 `PlcPollingService`는 `D111` 값을 MES ACTIVE 알람과 동기화합니다. `src/Mes.Gateway/Program.cs`에서 `machineCode: "PRESS"`로 연결돼 있으므로 PLC 알람 집계 대상의 범위를 참고해야 합니다.
+
+### HMI Dashboard Polling 핵심
+
+```csharp
+Task productionTask = LoadProductionAsync();
+Task productTask = LoadCurrentProductAsync();
+Task alarmTask = LoadActiveAlarmsAsync();
+Task machineTask = LoadMachineStatusAsync();
+Task processEventTask = LoadRecentProcessEventsAsync();
+
+await Task.WhenAll(
+    productionTask, productTask, alarmTask, machineTask, processEventTask
+);
+await Task.Delay(1000, token);
+```
+
+따라서 옛 문서의 **"HMI → Server 미구현"**, **"HMI Dashboard Polling 구현 필요"** 설명은 현재 코드와 맞지 않습니다.
 
 ---
 
-# 3. Feeder STOP 제어 문제
 
-## 최초 상태
-
-Gemini Runtime을 실행하면 `ProductCreator`가 자동으로 원자재를 생성했다.
-
-```text
-Gemini ▶
- ↓
-Feeder ProductCreator
- ↓
-원자재 지속 생성
-```
-
-HMI STOP을 눌러도 Feeder가 계속 제품을 생성하는 문제가 있었다.
-
-목표는 다음과 같다.
-
-```text
-RUN_STATE=True
-→ Feeder 신규 원자재 생성 가능
-
-RUN_STATE=False
-→ Feeder 신규 원자재 생성 금지
-```
-
----
-
-## 3.1 SingleFeed IsEnabled 제어 시도
-
-초기에는 다음 속성을 제어했다.
-
-```python
-creator.SingleFeed.getProperty('IsEnabled')
-```
-
-결과:
-
-```text
-RUN_STATE=False
-→ IsEnabled=False
-→ 생성 중지 성공
-
-RUN_STATE=True
-→ IsEnabled=True
-→ 로그는 ON
-→ 실제 Product 생성 재개 실패
-```
-
-즉 속성은 다시 `True`가 되었지만 ProductCreator 내부 생성 루틴이 재시작되지 않았다.
-
-이 방식은 중단했다.
-
----
-
-## 3.2 ProductCreator Output Connector 제어
-
-Feeder Component Graph 확인 결과:
-
-```text
-ProductCreator
- ├─ Output
- └─ Input
-
-Output
- ↓
-Path / Input
-```
-
-`Output`은 Behaviour가 아니라 Connector였다.
-
-따라서 다음 코드는 실패했다.
-
-```python
-comp.findBehaviour('Output')
-```
-
-결과:
-
-```text
-[FEEDER] ERROR: Output not found
-```
-
-이후 Connector로 접근하도록 수정했다.
-
-```python
-output_connector = creator.getConnector('Output')
-path_input_connector = output_connector.Connection
-```
-
-STOP:
-
-```python
-output_connector.connect(None)
-```
-
-START:
-
-```python
-output_connector.connect(path_input_connector)
-```
-
-결과:
-
-```text
-STOP
-→ RUN_STATE=False
-→ OUTPUT DISCONNECTED
-→ 신규 원자재 생성 중지 성공
-```
-
-다만 Output 연결을 실제로 끊으면 ProductCreator에서 다음 오류가 발생했다.
-
-```text
-Feeder::ProductCreator 오류:
-ProductCreatorNoOutputConnectionDefined
-```
-
-따라서 **Feeder 신규 생성 차단 자체는 성공했지만 이 방식은 최종 구현으로 확정하지 않는다.**
-
-향후 ProductCreator 연결 자체를 해제하지 않고 생성 Trigger 또는 안전한 Flow Gate 방식으로 정리할 필요가 있다.
-
----
 
 # 4. Gemini가 정확히 48.5초에 멈추는 문제
 
@@ -436,6 +323,14 @@ dt/vm1/status
 
 따라서 MQTT 메시지 크기나 Broker 자체가 느린 것이 아니라, **매 Publish마다 `mosquitto_pub.exe`를 새로 실행하고 종료하던 구조가 병목**이었다.
 
+### 후속 반복 전송 측정(별도 측정값, 사용자 확인)
+
+- 초기: **약 5,000ms/전송 요청**(외부 프로세스 실행·종료 방식)
+- 후속 반복 전송: **0.1~0.3ms/호출**(프로세스 유지·재사용)
+- **측정 대상**: Python 송신 함수에서 요청 처리에 걸린 시간(`stdin.write`·`flush` 등을 포함하는 계측 구간). **브로커 도착 지연, MQTT 왕복시간, PLC 통신 전체 지연 또는 전체 생산 Cycle Time이 아닙니다.**
+- **검증 근거 구분**: 위의 **3.84ms/1.88ms**는 이 문서에 보존된 당시 기록값이고, **0.1~0.3ms**는 이후 사용자가 확인한 별도 반복 측정값입니다. 같은 실행·로그 조건의 값이 아니므로 임의로 합산하거나 서로 대체하지 않습니다. 현재 GitHub에는 0.1~0.3ms 원본 측정 로그가 확인되지 않습니다.
+
+
 ---
 
 # 8. 새로 발생한 ResourceWarning
@@ -507,7 +402,9 @@ mosquitto_pub.exe
 
 # 10. ResourceWarning 방지 설계
 
-최종 Persistent Publisher는 다음 Lifecycle을 가진다.
+> **상태 구분**: 이 장부터 17장까지는 당시 작성한 Gemini Python 스크립트의 **정리 설계 및 적용 예시**입니다. 현재 MES-System GitHub C# 소스만으로는 실제 Gemini 런타임에 동일한 코드가 탑재됐는지, STOP·RESET·재컴파일 후 orphan process가 0건인지 확정할 수 없습니다. 기존의 "최종" 표현은 **설계상 목표 상태**를 뜻하며 최신 재현 테스트가 필요합니다.
+
+설계한 Persistent Publisher는 다음 Lifecycle을 가집니다.
 
 ```text
 Script 실행
@@ -1195,189 +1092,154 @@ mosquitto_pub.exe
 
 ---
 
-# 18. 테스트 체크리스트
+# 18. 테스트 체크리스트 — 코드 확인과 실행 검증 분리
 
-## A. 성능
+GitHub에 구현 코드가 존재하는지와 **현재 사용 PC에서 재현 테스트에 통과했는지**는 다른 판단입니다.
 
-VM1 실행 후:
+| 항목 | 현재 판정 | 확인 방법 및 근거 |
+|---|---|---|
+| Gateway MQTT 구독 | 코드 확인 | `MqttClientService`에서 브로커 `127.0.0.1:1883` 연결, `dt/#` 구독 |
+| HMI 현황 자동 조회 | 코드 확인 | `MainForm.RunDashboardPollingAsync`에서 5개 API 작업을 `Task.WhenAll`로 조회하고 1초 대기 |
+| PLC D110/D111 조회 | 코드 확인 | `PlcPollingService`에서 반복 조회, 상태/알람 동기화 |
+| START/STOP/RESET 명령 | 코드 확인·과거 시연 확인 | API→SignalR→Gateway→M0/M1/M2 300ms 펄스; API `sent`만으로 PLC 실행 확인 불가 |
+| 작업지시·LOT·제품 초기 생성 | 코드 확인 | `WorkOrderRepository.CreateAsync`가 `usp_CreateWorkOrder` 호출, 1 WO→5 LOT→300 제품 흐름 |
+| PASS/FAIL·이동 이력·알람 | 코드 확인·과거 시연 확인 | MQTT 라우터→API→DB 저장, HMI에 결과 표시; 개별 시나리오 검증 |
+| MQTT 최적화 후 지연 | 과거 기록 및 후속 사용자 측정 | 기존 기록 3.84/1.88ms, 후속 반복 호출 0.1~0.3ms; 실행 조건을 명시해서 사용 |
+| Gemini 90초 이상 장시간 유지 | 최신 로그 확인 필요 | 멈춤 없이 진행되는지, 48.5초 통신 오류 재발 여부 확인 |
+| Publisher 종료 후 프로세스 정리 | 최신 로그 확인 필요 | Gemini STOP/RESET/재컴파일 뒤 `mosquitto_pub.exe` 잔존 개수와 ResourceWarning 확인 |
+| Feeder STOP→START→RESET | **미완료/재검증** | 제품 생성·중단·재개와 ProductCreator 연결 오류 없이 이어지는지 확인 |
+| 60EA LOT 전환, 300EA 전체 생산 | **미완료/재검증** | 개별 이벤트 확인과 달리 전체 연속 생산 완료 검증이 필요 |
+
+## A. 성능·MQTT
 
 ```text
-[MQTT] 전송 요청 : dt/process/event / 수 ms
-[MQTT] 전송 요청 : dt/vm1/status / 수 ms
+[ ] VM1 / PRESS 최초 Publish와 2회차 이후 반복 Publish 시간을 별도로 기록
+[ ] Gemini dt/process/event, dt/vm1/status, dt/press/status, dt/quality/result 발행 확인
+[ ] Gateway에서 dt/# MQTT 토픽 수신 확인
+[ ] Server API 처리와 MES_SYSTEM 저장·조회 확인
+[ ] Python 계측시간과 네트워크/PLC 통신시간을 혼동하지 않기
 ```
 
-정상 목표:
+## B. PLC·HMI·생산이력
 
 ```text
-기존 5,000ms 이상
-→ 수 ms 수준
+[ ] HMI START·STOP·RESET 조작 → SignalR 명령 → Gateway 로그 → PLC M0/M1/M2 신호 확인
+[ ] D110 RUN/STOP, D111 Alarm 값을 Gateway가 반복 읽는지 확인
+[ ] HMI 생산/제품/설비/알람/최근 이벤트 값이 API 조회 결과와 일치하는지 확인
+[ ] DB에 작업지시/LOT/Product를 생성한 후 개별 제품 PASS/FAIL 및 이동 이력 확인
 ```
 
----
-
-## B. Gateway 수신
-
-Gateway:
+## C. Lifecycle·장시간 테스트
 
 ```text
-[MQTT] 수신 → dt/process/event
-[MQTT] 수신 → dt/vm1/status
-[MQTT] 수신 → dt/press/status
-[MQTT] 수신 → dt/quality/result
-```
-
-필요 Topic이 정상 수신되어야 한다.
-
----
-
-## C. Gemini 장시간 동작
-
-최소:
-
-```text
-90초 이상
-```
-
-실행해서 기존의:
-
-```text
-0:00:48.50
-MITSUBISHI ELECTRIC FA
-5000 ms 통신 오류
-```
-
-가 재발하지 않는지 확인한다.
-
----
-
-## D. STOP Cleanup
-
-Gemini STOP 후 로그:
-
-```text
-[MQTT] Publisher 전체 정리 시작
-[MQTT] Publisher 정상 종료 ...
-[MQTT] Publisher 전체 정리 완료
-```
-
-작업 관리자:
-
-```text
-mosquitto_pub.exe = 0개
-mosquitto.exe     = Broker이므로 유지
+[ ] Gemini 90초 이상 연속 실행하고 48.5초 시점 통신 지연 오류 미재발 확인
+[ ] Simulation STOP/RESET 직후 mosquitto_pub.exe 종료 확인(mosquitto.exe Broker와 구분)
+[ ] Script 재컴파일 후 중복 mosquitto_pub.exe 프로세스가 남지 않는지 확인
+[ ] ResourceWarning / unclosed file / orphan process 로그 확인
+[ ] STOP→START→RESET 후 Feeder 제품 생성·재개 안정성 확인
+[ ] 가능하면 1 LOT(60EA) 및 전체 300EA 시나리오 별도 검증
 ```
 
 ---
 
-## E. 재START
+# 19. 데이터 누락·생산 대상 Product 오류 — 역사적 이슈와 현재 상태
 
-다시 Gemini ▶:
-
-```text
-첫 MQTT 이벤트
-→ 새로운 mosquitto_pub.exe 생성
-
-그 이후
-→ 동일 프로세스 재사용
-```
-
-되어야 한다.
-
----
-
-# 19. 별도 확인된 데이터 문제
-
-Gateway 로그에서 다음 메시지가 확인되었다.
+과거 Gateway에서 다음 오류가 발생한 기록이 있습니다.
 
 ```text
 [Gateway] Quality Result 처리 중단
 [Gateway] 품질판정 대상 Product를 찾지 못했습니다.
-```
 
-동시에 Production 정보:
-
-```text
-Target   : 0
-Produced : 0
-Good     : 0
-Defect   : 0
-
+Target: 0 / Produced: 0 / Good: 0 / Defect: 0
 현재 RUNNING LOT 없음
 ```
 
-이는 MQTT 전송 지연 문제와 별개다.
+당시에는 Local MSSQL을 초기화한 뒤 진행 중인 WorkOrder/LOT/Product가 없는데 Gemini 측 품질 이벤트가 먼저 도착하는 상황으로 **추정**했습니다. 이는 MQTT 송신시간 최적화 문제와는 **별도**입니다.
 
-현재 Local MSSQL에는 스키마는 있지만 기존 테스트 생산 데이터가 없기 때문에, 실제 Quality Result를 연결할 Product / RUNNING LOT이 없어서 발생할 수 있다.
+**2026-10-16 현재 GitHub 코드 확인**
+- `WorkOrderRepository.CreateAsync`가 SQL Stored Procedure `usp_CreateWorkOrder`를 실행합니다. 문서·코드 기준 작업지시 1건 → LOT 5개 → 제품 300개의 기본 생성 구조가 있습니다.
+- HMI `MesServerClient`에 미완료 작업지시 조회, 새 작업지시 코드 조회, 작업지시 생성·시작·재개 API 호출이 있습니다.
+- Gateway `MqttMessageRouter`는 현재 Product와 품질 결과를 연결하고, 서버 API를 통해 이벤트를 처리합니다.
+- 과거와 달리 **개별 제품 이동 및 PASS/FAIL 결과를 DB에서 조회한 시연은 확인된 것으로 기록**되어 있습니다.
 
-MQTT/통신 최적화를 완료한 뒤 다음 단계에서:
-
-```text
-WorkOrder
-→ LOT
-→ Products
-```
-
-테스트 데이터를 기존 API / Stored Procedure 흐름을 통해 생성해야 한다.
+**주의:** 과거 로그의 '현재 RUNNING LOT 없음'을 오늘도 발생 중인 오류로 기술하지 않습니다. 다만 초기화·재시작·데이터 정합성 문제에 대한 자동 복구가 모든 경우에 검증된 것으로도 주장하지 않습니다. 전체 60EA/300EA 연속 공정 검증은 별도 과제입니다.
 
 ---
 
-# 20. 현재까지 결론
+# 20. 현재까지 결론 — 2026-10-16 기준
 
-### 완료
-
-```text
-HMI → Server → SignalR → Gateway → PLC
-START / STOP / RESET 전달
-
-M3 = RUN_STATE
-Gemini Signal Relay 연결
-
-Gateway D110 / D111 1초 Polling
-
-Gemini MQTT
-→ Gateway
-→ Mes.Server
-데이터 전달 확인
-
-MQTT subprocess.run 병목 발견
-
-MQTT Persistent Publisher 적용
-
-약 5.5초
-→ 약 1~4ms
-통신 최적화 성공
-```
-
-### 아직 정리 필요
+### 구현 코드 확인
 
 ```text
-1. Persistent mosquitto_pub Lifecycle 최종 검증
-2. ResourceWarning / orphan process 재발 여부 확인
-3. 90초 이상 Gemini 장시간 실행 검증
-4. Feeder STOP 방식 최종 개선
-   - Output Connector disconnect 방식은
-     ProductCreatorNoOutputConnectionDefined 오류 발생
-5. Local DB 테스트 WorkOrder / LOT / Product 생성
-6. HMI Dashboard 1초 Polling
+[제어 경로]
+HMI → HTTP → Mes.Server → SignalR → Mes.Gateway → MX Component → PLC Simulator
+START=M0, STOP=M1, RESET=M2 / 300ms Pulse
+
+[설비 상태 및 알람]
+Gateway → PLC D110·D111 반복 조회(각 조회 후 1초 대기)
+D111 알람 코드를 Server의 ACTIVE/CLEAR 알람과 동기화
+
+[생산정보 경로]
+Gemini → MQTT/Mosquitto → Gateway(dt/#) → Server API → SQL Server
+HMI → Server HTTP API로 생산·제품·설비·알람·최근 이벤트 조회
+(조회 완료 후 1초 대기)
+
+[작업지시/제품]
+새 WorkOrder 생성 및 미완료 WorkOrder 재개에 필요한 API·HMI 코드
+WorkOrder 1건 / LOT 5건 / Product 300건 저장 프로시저 연동
 ```
+
+### 기존 기록과 후속 확인에 근거한 결과
+
+- HMI 명령 및 제어 흐름, 개별 제품 이동·PASS/FAIL, PLC 알람 발생·해제와 HMI 표시가 **시뮬레이터 환경에서 확인**됐습니다.
+- MQTT 외부 프로세스 매회 실행 병목을 파악하고 Persistent Publisher 방식으로 변경했습니다.
+- 역사적 계측(이 문서): `5645.37ms / 5504.06ms` → `3.84ms / 1.88ms`(토픽별). 후속 사용자 반복 호출 계측은 **약 5초 → 0.1~0.3ms**입니다. **서로 다른 계측 조건을 한 가지 수치로 합치지 않습니다**.
+
+### 최신 검증이 필요한 항목
+
+```text
+1. Gemini 실제 배치된 VM1·PRESS Python 스크립트가 10~17장의 cleanup 구현과 동일한지
+2. Gemini STOP/RESET/재컴파일 후 mosquitto_pub.exe orphan 0건 및 ResourceWarning 미발생
+3. 90초 이상 통신 지연 없이 연속 동작하는지 최신 시연 로그 확보
+4. Feeder Controlled STOP/재START 안정성(Connector 해제 오류 없이)
+5. 60EA LOT 자동 전환 및 300EA 전체 연속 생산 완료
+6. 장애/재연결 후 이벤트 중복·유실 방지 및 정확한 상태 복구
+```
+
+**환경 버전 주의:** 코드는 MX Component COM 타입을 사용하지만, C# 소스만으로 V4/V5 설치 제품 버전을 특정할 수 없습니다. 실제 사용자 개발 PC에서는 V4를 사용한다고 확인되었고, README·과거 통신 문서의 V5 설명은 수정 필요합니다. SQL Server도 초기 AWS RDS에서 로컬 개발 DB로 변경된 이력이 있습니다.
 
 ---
 
-# 21. 다음 작업 순서
+# 21. 권장 다음 작업 순서 — 기능 구현과 검증 구분
 
-현재 우선순위:
+1. **현재 Gemini Python 스크립트 백업·대조**: VM1/PRESS의 Publisher 재사용·cleanup 구현이 이 문서 10~17장과 일치하는지 먼저 확인합니다.
+2. **MQTT 성능 재측정**: 첫 Publish와 반복 Publish의 Python 호출 처리시간을 따로 기록합니다. 사용자의 0.1~0.3ms 후속 측정 로그도 확보합니다.
+3. **시뮬레이터 연결 및 서비스 실행**: Mosquitto → PLC Simulator/MX Component → Mes.Server → Mes.Gateway → Gemini → HMI 순서로 각 연결을 확인합니다.
+4. **단일 제품 검증**: 현재 WorkOrder/LOT/Product가 생성된 상태에서 PASS·FAIL, 공정 이동, 알람 ACTIVE/CLEAR, DB 및 HMI 반영을 확인합니다.
+5. **장시간/정리 테스트**: Gemini 90초 이상 실행 후 STOP/RESET/재시작/스크립트 재컴파일. `mosquitto_pub.exe` 잔존 0건과 경고 미발생을 검증합니다.
+6. **Feeder 문제 보완**: START/STOP/RESET에 따라 신규 제품 생성이 오류 없이 중단·재개되는 방식을 확정합니다. 기존 Output Connector 해제 방식을 그대로 채택하지 않습니다.
+7. **LOT/작업지시 끝단 검증**: 60EA 처리 후 다음 LOT 전환, 5 LOT/300EA 완료까지 결과를 기록합니다.
+8. **README·아키텍처 자료 정합성 갱신**: 실제 사용 MX Component 버전, 현재 DB 위치, 장시간 생산 검증 상태를 최신화합니다.
 
-```text
-1. 기존 orphan mosquitto_pub PID 1회 종료
-2. VM1 / PRESS에 Lifecycle cleanup 적용
-3. Gemini START
-4. VM1 / PRESS MQTT 동작 확인
-5. 90초 이상 실행
-6. Gemini STOP
-7. mosquitto_pub.exe 0개 확인
-8. ResourceWarning 재발 여부 확인
-```
+> 각 항목은 **권장 후속 검증/작업**이며, 리스트에 적혔다고 완료된 것은 아닙니다.
 
-여기까지 성공하면 MQTT 통신 최적화 작업을 완료 처리한다.
+---
 
-그 다음 다시 Feeder Controlled Stop 문제로 돌아간다.
+# 22. 현재 구현과 문서 대조 근거
+
+**대조 대상:** `EddieEom/MES-System` GitHub 기본 브랜치의 현재 파일 및 2026-10-06 원본 트러블슈팅 기록. 아래는 `코드 확인`을 뜻하며 GitHub를 실행한 테스트가 아닙니다.
+
+| 근거 파일 | 확인한 사실 |
+|---|---|
+| `Mes.Hmi/Forms/MainForm.cs` | 대시보드 5종 조회 Task 병렬 실행, 완료 후 1초 대기 |
+| `Mes.Hmi/Api/MesServerClient.cs` | 생산·제품·설비·알람·이벤트 조회, PLC 제어, WorkOrder 생성/시작/재개 API |
+| `src/Mes.Server/Controllers/Control/PlcControlController.cs` | HMI 제어 API→SignalR `PlcCommand` 전송, 응답 `sent` |
+| `src/Mes.Gateway/Services/GatewaySignalRService.cs` | Gateway 명령 수신·중복 CommandId 확인·PLC 제어 처리 |
+| `src/Mes.Gateway/Services/PlcControlService.cs` | M0/M1/M2 및 300ms Pulse 지정 |
+| `src/Mes.Gateway/Plc/MxComponentPlcClient.cs` | `ActUtlType64Lib` 기반 PLC 읽기·쓰기·펄스, STA Thread |
+| `src/Mes.Gateway/Services/PlcPollingService.cs` | D110/D111 반복 조회 및 D111 기반 PLC 알람 동기화 |
+| `src/Mes.Gateway/Mqtt/MqttClientService.cs` | MQTTnet Broker 연결·`dt/#` 구독 |
+| `src/Mes.Gateway/Routing/MqttMessageRouter.cs` | 상태·공정·품질 MQTT 토픽 처리 |
+| `src/Mes.Gateway/Program.cs` | Server/PLC 연결, SignalR·MQTT·Polling 서비스 시작, 알람 상태 동기화 |
+| `src/Mes.Server/Repositories/WorkOrder/WorkOrderRepository.cs` | `usp_CreateWorkOrder` 호출, 1 WO/5 LOT/300 제품 구조 |
+| `README.md` | 주요 기능·개별 테스트 기록, 다만 V5·AWS RDS 설명이 예전 환경과 혼재 |
