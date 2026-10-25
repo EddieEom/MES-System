@@ -1,8 +1,8 @@
-# MES / Gemini MQTT 통신 최적화 및 트러블슈팅 기록
+# PLC 설비 제어 프로그램 · Gemini MQTT 통신 트러블슈팅
 
 최초 작성일: 2026-10-06  
 구현 현황 재검토: 2026-10-16  
-대상 프로젝트: 디지털 트윈 연동 PLC 설비 제어·MES 생산관리 시스템  
+대상 프로젝트: 디지털 트윈 기반 PLC 설비 제어 프로그램  
 가상 생산설비 모델 제공: **㈜퍼씨엠** (설비 모델은 외부 제공, Gateway·Server·DB·HMI 연동은 개발 범위)  
 대상 구간: MELSOFT Gemini ↔ MQTT/Mosquitto ↔ Mes.Gateway ↔ Mes.Server ↔ SQL Server / HMI ↔ PLC 시뮬레이터
 
@@ -76,7 +76,7 @@ D110 = PLC 운전 상태
 D111 = PLC Alarm Code (0: 정상, 0 초과: 알람)
 ```
 
-현재 `PlcPollingService`는 `D111` 값을 MES ACTIVE 알람과 동기화합니다. `src/Mes.Gateway/Program.cs`에서 `machineCode: "PRESS"`로 연결돼 있으므로 PLC 알람 집계 대상의 범위를 참고해야 합니다.
+현재 `PlcPollingService`는 `D111` 값을 서버의 ACTIVE 알람과 동기화합니다. `src/Mes.Gateway/Program.cs`에서 `machineCode: "PRESS"`로 연결돼 있으므로 PLC 알람 집계 대상의 범위를 참고해야 합니다.
 
 ### HMI Dashboard Polling 핵심
 
