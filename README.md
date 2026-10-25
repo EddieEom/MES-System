@@ -1,8 +1,10 @@
 <div align="center">
 
-# MES-System
+# 디지털 트윈 기반 PLC 설비 제어 프로그램
 
 **가상 설비의 제어부터 생산 데이터 수집·HMI 모니터링까지**
+
+작업지시·LOT·제품 이동·검사 이력 관리 등 MES 관련 기능을 함께 구현한 개인 프로젝트입니다. GX Simulator2와 MELSOFT Gemini 환경에서 동작을 확인했습니다.
 
 </div>
 
@@ -40,12 +42,12 @@
 
 ## 🔗 시스템 구성
 
-![MES 시스템 구성도](./docs/images/system-architecture.svg)
+![PLC 설비 제어 프로그램 구성도](./docs/images/system-architecture.svg)
 
 | 구성 요소 | 사용 기술 |
 | :--- | :--- |
 | 작업자 화면 | WinForms HMI |
-| MES 서버 | ASP.NET Core Web API |
+| 애플리케이션 서버 | ASP.NET Core Web API |
 | 통신 프로그램 | Mes.Gateway · SignalR · MQTTnet |
 | PLC 연동 | GX Simulator2 · MX Component |
 | 가상 생산 설비 | MELSOFT Gemini |
@@ -250,7 +252,7 @@ Gateway는 MX Component의 COM 참조를 사용하므로, MX Component 설치와
 
 | 항목 | 현재 코드의 기본값 |
 |---|---|
-| MES 서버 주소 | https://localhost:7075 |
+| 애플리케이션 서버 주소 | https://localhost:7075 |
 | MQTT Broker | 127.0.0.1:1883 |
 | Gateway MQTT 구독 | dt/# |
 | MX Component 논리국 번호 | 1 |
