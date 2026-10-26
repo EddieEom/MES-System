@@ -1,19 +1,22 @@
-<div align="center">
-
 # 디지털 트윈 기반 PLC 설비 제어 프로그램
 
-**가상 설비의 제어부터 생산 데이터 수집·HMI 모니터링까지**
+화면에서 설비에 명령을 보내고, 설비에서 나온 데이터를 다시 받아보는 구조를 만들고 싶어서 시작했습니다. 현장에서 MES를 사용했던 경험을 떠올리며 생산 정보가 화면까지 전달되는 과정을 직접 연결해 봤습니다.
 
-작업지시·LOT·제품 이동·검사 이력 관리 등 MES 관련 기능을 함께 구현한 개인 프로젝트입니다. GX Simulator2와 MELSOFT Gemini 환경에서 동작을 확인했습니다.
+## 이 프로젝트에서 공부한 것
 
-</div>
+MQTT를 활용하면서 제어 요청과 생산 데이터가 양방향으로 오가는 구조를 구성했습니다. 현재 코드에서 **MQTT는 생산 데이터 수신**, **SignalR와 PLC 통신은 제어 명령 전달**을 맡습니다.
 
-<p align="center"><img alt="C#" src="https://img.shields.io/badge/C%23-512BD4?style=flat-square"/> <img alt="ASP.NET Core" src="https://img.shields.io/badge/ASP.NET%20Core-512BD4?style=flat-square"/> <img alt="WinForms" src="https://img.shields.io/badge/WinForms-512BD4?style=flat-square"/> <img alt="MQTT" src="https://img.shields.io/badge/MQTT-660066?style=flat-square"/> <img alt="SQL Server" src="https://img.shields.io/badge/SQL%20Server-CC2927?style=flat-square"/></p>
+| 방향 | 흐름 |
+| --- | --- |
+| 제어 | WinForms HMI → 서버 API → SignalR → Gateway → MX Component → PLC 시뮬레이터 → 가상 설비 |
+| 데이터 | 가상 설비 → MQTT Broker → Gateway → 서버 API → DB |
+| 조회 | HMI → 서버 API → 생산 현황·이력 표시 |
 
+MQTT 하나로 두 방향을 모두 구현한 구조는 아닙니다. 서로 다른 통신 방식을 연결하며 각 프로그램의 역할과 데이터 흐름을 공부했습니다.
 
-| 개발 형태 | 담당 범위 | 확인 환경 |
-| :--- | :--- | :--- |
-| **개인 프로젝트** | **통신 · 서버 · DB · HMI** | GX Simulator2 · MELSOFT Gemini |
+제공받은 부분은 가상 설비 모델이고, C# Gateway·ASP.NET Core 서버·MSSQL·WinForms HMI와 연동을 개인 프로젝트로 구현했습니다. 설계와 코드 작성에는 AI의 도움을 받았으며, 호출 순서와 조건별 처리를 확인하고 화면·로그·DB 결과를 비교했습니다.
+
+검사 결과와 제품·LOT 상태를 함께 반영하는 트랜잭션도 구현했습니다. 동작은 GX Simulator2와 MELSOFT Gemini에서 확인했으며 실제 설비의 장시간 운전까지 검증한 프로젝트는 아닙니다.
 
 ## 실행 화면
 
