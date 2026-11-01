@@ -1,0 +1,24 @@
+name: MQTT receiver reliability
+on:
+  pull_request:
+    paths: ['src/Mes.Gateway/Mqtt/**', 'tests/MqttReliability/**', '.github/workflows/mqtt-reliability.yml']
+  push:
+    paths: ['src/Mes.Gateway/Mqtt/**', 'tests/MqttReliability/**', '.github/workflows/mqtt-reliability.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mqtt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet run --project tests/MqttReliability -c Release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mqtt-reliability-result
+          path: TestResults/*.json

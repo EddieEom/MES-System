@@ -1,0 +1,16 @@
+{
+  "utc": "2026-11-01T11:11:44.9643241+00:00",
+  "runtime": "8.0.33",
+  "test": "real Gateway MQTT receiver \u002B in-process broker \u002B TCP fault proxy \u002B ID sink",
+  "targetMessagesPerSecond": 1000,
+  "loadMessages": 60000,
+  "loadSeconds": 59.9995012,
+  "observedMessagesPerSecond": 1000.0083134024454,
+  "offlineMessages": 100,
+  "uniqueReceived": 60100,
+  "duplicates": 0,
+  "connections": 2,
+  "handlerFailures": 0,
+  "missing": 0,
+  "scope": "No PLC, production router, HTTP API, DB or WinForms; not an end-to-end benchmark"
+}

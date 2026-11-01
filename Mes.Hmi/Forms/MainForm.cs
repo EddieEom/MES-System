@@ -1,4 +1,4 @@
-﻿using Mes.Hmi.Api;
+using Mes.Hmi.Api;
 using Mes.Hmi.Models.Alarm;
 using Mes.Hmi.Models.Control;
 using Mes.Hmi.Models.Machine;
@@ -149,13 +149,21 @@ namespace Mes.Hmi.Forms
                     // 모두 완료될 때까지 대기
                     // =====================================
 
-                    await Task.WhenAll(
-                        productionTask,
-                        productTask,
-                        alarmTask,
-                        machineTask,
-                        processEventTask
-                    );
+                    try
+                    {
+                        await Task.WhenAll(
+                            productionTask, productTask, alarmTask,
+                            machineTask, processEventTask);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        // A failed refresh must not permanently end dashboard polling.
+                        Console.WriteLine($"[HMI REFRESH ERROR] {ex.Message}");
+                    }
 
 
                     // =====================================
