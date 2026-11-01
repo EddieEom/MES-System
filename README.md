@@ -7,6 +7,15 @@ C# · WinForms · ASP.NET Core · MSSQL · MQTT · SignalR · MX Component
 <img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-hmi.jpg" alt="작업지시·생산 현황·설비 상태·알람을 표시하는 HMI" width="100%"/>
 
 
+## 설비·HMI 연동 시연
+
+[![작업자 HMI와 Gemini 가상 설비를 함께 촬영한 시연 환경](docs/media/hmi-gemini-demo.jpg)](docs/media/hmi-gemini-demo.mp4)
+
+**[▶ 시연 영상 보기 · 약 26초](docs/media/hmi-gemini-demo.mp4)** · [MP4 원본 열기](https://raw.githubusercontent.com/EddieEom/MES-System/main/docs/media/hmi-gemini-demo.mp4)
+
+노트북의 WinForms HMI와 외부 모니터의 MELSOFT Gemini를 함께 촬영했습니다. 가상 설비의 움직임과 HMI 상태 변화를 볼 수 있습니다. 촬영 대상은 시뮬레이터 환경입니다.
+
+
 ## 어떤 프로그램인가요?
 
 화면의 버튼이 설비 동작으로 이어지고, 설비에서 나온 정보가 다시 화면에 표시되는 과정을 직접 연결해 보고 싶었습니다. WinForms 화면과 서버·DB를 구성한 뒤 PLC 시뮬레이터와 가상 설비를 연결했습니다.
@@ -20,7 +29,7 @@ C# · WinForms · ASP.NET Core · MSSQL · MQTT · SignalR · MX Component
 
 ## 개발 범위와 진행 방식
 
-**㈜퍼씨엠이 제공한 가상 생산설비 모델**을 활용한 개인 프로젝트입니다. Gateway·ASP.NET Core 서버·MSSQL·WinForms HMI와 연동을 구현했습니다.
+**외부 업체에서 제공받은 가상 생산설비 모델**을 활용한 개인 프로젝트입니다. Gateway·ASP.NET Core 서버·MSSQL·WinForms HMI와 연동을 구현했습니다.
 
 필요한 기능과 데이터 처리 순서를 정리하고, AI를 활용해 설계와 코드를 작성했습니다. 실행 중 발생한 증상과 코드·로그를 제공하고, AI가 제안한 분석과 수정안을 적용한 뒤 다시 실행해 확인했습니다. 생성된 코드의 호출 순서와 조건별 동작도 질문하며 확인했습니다.
 
@@ -44,6 +53,9 @@ Gemini가 공정 중 멈췄습니다. STOP을 눌렀을 때 원자재 공급은 
 
 설정 변경 후에도 문제가 반복돼 MQTT 발행 Python 코드를 제공했습니다. AI가 `subprocess.run()`으로 외부 발행 프로그램의 종료를 기다리는 구간을 병목 후보로 제시했고, 측정 코드를 적용해 로그를 확인했습니다. 이후 AI가 제안한 `mosquitto_pub.exe` 유지·재사용 방식을 적용하고, 변경 후 전송 요청 로그를 다시 전달했습니다.
 
+<details>
+<summary>본인 수행 내용과 AI 활용 범위</summary>
+
 | 과정 | 직접 진행한 내용 | AI의 도움을 받은 내용 |
 | --- | --- | --- |
 | 증상 확인 | STOP에 따른 공급 중단과 Gemini 정지 현상을 구분해 전달 | 로그 해석과 분리 시험 방법 제안 |
@@ -51,7 +63,7 @@ Gemini가 공정 중 멈췄습니다. STOP을 눌렀을 때 원자재 공급은 
 | 수정·재확인 | 재사용 방식 적용 후 실행 결과 전달, PRESS에도 같은 방식 적용 요청 | 발행 프로세스 재사용 코드 작성 |
 | 종료 처리 | 유지되는 프로세스가 남지 않도록 보완 요청, 이후 발생한 `ResourceWarning` 전달 | 프로세스·표준입력 정리 방법과 수정 코드 제안 |
 
-원인 분석과 코드 작성은 AI의 도움을 받았습니다. 직접 진행한 부분은 실행 조건과 증상을 전달하고, 수정안을 적용한 뒤 로그와 동작을 다시 확인하는 과정입니다.
+</details>
 
 [코드와 측정 과정을 정리한 트러블슈팅](MES_Gemini_MQTT_통신최적화_트러블슈팅_2026-10-06.md)
 
