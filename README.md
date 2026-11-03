@@ -33,7 +33,7 @@ C# · WinForms · ASP.NET Core · MSSQL · MQTT · SignalR · MX Component
 
 외부 업체와 통신 오류를 공유할 때는 증상과 재현 조건, 관련 코드, 측정 로그, 적용 결과를 구분해 전달했습니다. 다른 개발자가 코드를 추적할 수 있도록 파일·메서드별 흐름과 검증 한계도 문서화했습니다.
 
-- [프로젝트 역할·설계 책임·AI 활용 범위·기술 커뮤니케이션](docs/project-ownership-and-communication.md)
+- [프로젝트 역할·설계 내용·AI 활용 범위·협업을 위한 기록:](docs/project-ownership-and-communication.md)
 - [MES-System 코드 추적 및 협업용 가이드](docs/code-trace-guide.md)
 
 ## 개발 범위와 LLM 활용·실행 검증
