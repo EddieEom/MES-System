@@ -7,6 +7,18 @@ C# · WinForms · ASP.NET Core · MSSQL · MQTT · SignalR · MX Component
 <img src="https://raw.githubusercontent.com/EddieEom/EddieEom/main/assets/screenshots/mes-hmi.jpg" alt="작업지시·생산 현황·설비 상태·알람을 표시하는 HMI" width="100%"/>
 
 
+## 코드에서 원인을 찾아 수정한 사례
+
+**가상 설비가 멈췄을 때, 설정 변경만으로 해결되지 않아 Python 발행 함수의 실행 시간을 확인했습니다.**
+
+- **확인한 곳:** `publish_mqtt()` 안의 `subprocess.run()` — 메시지를 보낼 때마다 발행 프로그램의 종료를 기다리고 있었습니다.
+- **바꾼 부분:** `mosquitto_pub.exe`를 유지하고, 표준입력으로 메시지를 전달하도록 변경했습니다.
+- **추가 점검:** 재사용 이후 발생한 `ResourceWarning`을 확인해 표준입력·프로세스 정리 처리를 보완했습니다.
+
+[**수정 전후 코드와 당시 측정 기록**](MES_Gemini_MQTT_통신최적화_트러블슈팅_2026-10-06.md#debugging-summary) · [기능별 코드 호출 경로](docs/code-trace-guide.md)
+
+측정값은 Python 호출 구간입니다. 변경 전후 종료 조건이 달라 통신 속도 개선 배수로 비교하지 않았습니다.
+
 ## 설비·HMI 연동 시연
 
 [![작업자 HMI와 Gemini 가상 설비를 함께 촬영한 시연 환경](docs/media/hmi-gemini-demo.jpg)](docs/media/hmi-gemini-demo.mp4)
